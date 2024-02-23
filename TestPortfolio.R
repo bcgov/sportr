@@ -84,10 +84,10 @@ ef_plot(port_results$raw, port_results$summary, colScale)
 
 
 
-siteLoc <- data.table(lon = c(-127.74817), lat = c(55.45829), elev = c(312), id = 1)
-FutScn <- "ssp245"
-period_end <- 2060
-point_dat <- data.table(lon = c(-127.74817), lat = c(55.45829), elev = c(312), id = 1)
-clim <- climr_downscale(point_dat, which_normal = "normal_composite", gcm_models = list_gcm()[c(1,5,7,10:12)],
-                        ssp = "ssp245", gcm_ts_years = 2020:2060, max_run = 4L, return_normal = FALSE, 
-                        vars = c("CMD","Tmin_sp","Tmax_sm"))
+# siteLoc <- data.table(lon = c(-127.74817), lat = c(55.45829), elev = c(312), id = 1)
+# FutScn <- "ssp245"
+# period_end <- 2060
+# point_dat <- data.table(lon = c(-127.74817), lat = c(55.45829), elev = c(312), id = 1)
+# clim <- climr_downscale(point_dat, which_normal = "normal_composite", gcm_models = list_gcm()[c(1,5,7,10:12)],
+#                         ssp = "ssp245", gcm_ts_years = 2020:2060, max_run = 4L, return_normal = FALSE, 
+#                         vars = c("CMD","Tmin_sp","Tmax_sm"))
