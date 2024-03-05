@@ -11,6 +11,7 @@ library(dplyr)
 library(magrittr)
 library(ggplot2)
 library(ggthemes)
+require(pool)
 
 source("prep_data.R")
 source("run_portfolio.R")
