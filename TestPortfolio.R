@@ -13,7 +13,7 @@ library(dplyr)
 library(magrittr)
 library(ggplot2)
 library(ggthemes)
-library(ranger)
+
 
 source("optimisation.R")
 
