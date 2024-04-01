@@ -74,11 +74,11 @@ NumericVector SimGrowth_Climate(DataFrame DF, double cmdMin,
 }
 
 // [[Rcpp::export]]
-NumericVector SimGrowth_Regular(DataFrame DF, double climLoss){
-  NumericVector Growth = DF["Growth"]; //convert to vectors
+NumericVector SimGrowth_Regular(DataFrame DF){
+  NumericVector Growth = DF["SI"]; //convert to vectors
   NumericVector NoMort  = DF["NoMort"];
-  NumericVector MeanDead = DF["MeanDead"];
-  NumericVector Ruin = DF["Suit"];//think about this one
+  NumericVector MeanDead = DF["Prop_Feas"];
+  NumericVector Ruin = DF["FeasDiff"];//think about this one
   
   int numYears = Growth.length();
   NumericVector Returns(numYears);
@@ -90,11 +90,12 @@ NumericVector SimGrowth_Regular(DataFrame DF, double climLoss){
     Returns[i] = nTrees*height;
     
     if(Rcpp::runif(1,0,100)[0] > NoMort[i]){//regular environmental loss
+      Rcout << "Killing trees \n";
       percentDead = Rcpp::rgamma(1, 2, MeanDead[i])[0];
       numDead = (percentDead/100)*prevTrees;
       nTrees = nTrees - numDead;
     }
-    if(Ruin[i] > 3){
+    if(Ruin[i] >= 2){
       percentDead = Rcpp::rgamma(1, 1.5, 25)[0];
       numDead = (percentDead/100)*prevTrees;
       nTrees = nTrees - numDead;
@@ -103,3 +104,34 @@ NumericVector SimGrowth_Regular(DataFrame DF, double climLoss){
   return(Returns);
 }
 
+// [[Rcpp::export]]
+NumericVector simGrowthCpp(DataFrame DF){
+  int nTrees = 100;
+  NumericVector Growth = DF["SI"]; //convert to vectors
+  NumericVector NoMort  = DF["NoMort"];
+  NumericVector MeanDead = DF["Prop_Feas"];
+  NumericVector Ruin = DF["FeasDiff"];//think about this one
+  
+  int numYears = Growth.length();
+  NumericVector Returns(numYears);
+  double height, percentDead;
+  int prevTrees, numDead, i;
+  for(i = 0; i < numYears; i++){
+    height = sum(Growth[Rcpp::Range(0,i)]);
+    Returns[i] = nTrees*height;
+    if(Rcpp::runif(1,0,100)[0] > NoMort[i]){//regular environmental loss
+      prevTrees = nTrees;
+      percentDead = Rcpp::rgamma(1, 1.5, MeanDead[i])[0];
+      //Rcout << "Percent Dead:" << percentDead << "\n";
+      numDead = (percentDead/100)*prevTrees;
+      nTrees = prevTrees - numDead;
+    }
+    // if(Ruin[i] >= 3){
+    //   prevTrees = nTrees;
+    //   percentDead = Rcpp::rgamma(1, 1.5, 25)[0];
+    //   numDead = (percentDead/100)*prevTrees;
+    //   nTrees = nTrees - numDead;
+    // }
+  }
+  return(Returns);
+}

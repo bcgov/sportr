@@ -9,7 +9,11 @@ SimGrowth_Climate <- function(DF, cmdMin, cmdMax, tempMin, tempMax, climLoss) {
     .Call(`_sportr_SimGrowth_Climate`, DF, cmdMin, cmdMax, tempMin, tempMax, climLoss)
 }
 
-SimGrowth_Regular <- function(DF, climLoss) {
-    .Call(`_sportr_SimGrowth_Regular`, DF, climLoss)
+SimGrowth_Regular <- function(DF) {
+    .Call(`_sportr_SimGrowth_Regular`, DF)
+}
+
+simGrowthCpp <- function(DF) {
+    .Call(`_sportr_simGrowthCpp`, DF)
 }
 

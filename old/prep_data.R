@@ -1,3 +1,30 @@
+
+addVarsOld <- function(dat){ ##this function modifies everything inplace, so no need for return value
+  dat[,`:=`(PPT_MJ = PPT05+PPT06,
+            PPT_JAS = PPT07+PPT08+PPT09,
+            PPT.dormant = PPT_at+PPT_wt)]
+  dat[,`:=`(CMD.def = 500-PPT.dormant)]
+  dat[CMD.def < 0, CMD.def := 0]
+  dat[,`:=`(CMDMax = CMD07,
+            CMD.total = CMD.def + CMD)]
+  dat[,`:=`(CMD.grow = CMD05+CMD06+CMD07+CMD08+CMD09,
+            DD5.grow = DD5_05+DD5_06+DD5_07+DD5_08+DD5_09,
+            #DDgood = DD5 - DD18,
+            #DDnew = (DD5_05+DD5_06+DD5_07+DD5_08)-(DD18_05+DD18_06+DD18_07+DD18_08),
+            TmaxJuly = Tmax07)]
+}
+
+addVars <- function(dat) {
+  dat[, PPT_MJ := PPT05 + PPT06]
+  dat[, PPT_JAS := PPT07 + PPT08 + PPT09]
+  dat[, PPT.dormant := PPT_at + PPT_wt]
+  dat[, CMD.def := pmax(0, 500 - PPT.dormant)]
+  dat[, CMDMax := CMD07]   ## TODO: THIS IS NOT NECESSARILY CMD MAX
+  dat[, CMD.total := CMD.def + CMD]
+  dat[, DD_delayed := pmax(0, ((DD_0_at + DD_0_wt)*0.0238) - 1.8386)]
+}
+
+
 #' Clean Portfolio Data
 
 #' @param SSPredAll cleanData parameter.

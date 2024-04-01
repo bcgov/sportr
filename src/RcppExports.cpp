@@ -40,14 +40,24 @@ BEGIN_RCPP
 END_RCPP
 }
 // SimGrowth_Regular
-NumericVector SimGrowth_Regular(DataFrame DF, double climLoss);
-RcppExport SEXP _sportr_SimGrowth_Regular(SEXP DFSEXP, SEXP climLossSEXP) {
+NumericVector SimGrowth_Regular(DataFrame DF);
+RcppExport SEXP _sportr_SimGrowth_Regular(SEXP DFSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< DataFrame >::type DF(DFSEXP);
-    Rcpp::traits::input_parameter< double >::type climLoss(climLossSEXP);
-    rcpp_result_gen = Rcpp::wrap(SimGrowth_Regular(DF, climLoss));
+    rcpp_result_gen = Rcpp::wrap(SimGrowth_Regular(DF));
+    return rcpp_result_gen;
+END_RCPP
+}
+// simGrowthCpp
+NumericVector simGrowthCpp(DataFrame DF);
+RcppExport SEXP _sportr_simGrowthCpp(SEXP DFSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< DataFrame >::type DF(DFSEXP);
+    rcpp_result_gen = Rcpp::wrap(simGrowthCpp(DF));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -55,7 +65,8 @@ END_RCPP
 static const R_CallMethodDef CallEntries[] = {
     {"_sportr_gs2gw", (DL_FUNC) &_sportr_gs2gw, 3},
     {"_sportr_SimGrowth_Climate", (DL_FUNC) &_sportr_SimGrowth_Climate, 6},
-    {"_sportr_SimGrowth_Regular", (DL_FUNC) &_sportr_SimGrowth_Regular, 2},
+    {"_sportr_SimGrowth_Regular", (DL_FUNC) &_sportr_SimGrowth_Regular, 1},
+    {"_sportr_simGrowthCpp", (DL_FUNC) &_sportr_simGrowthCpp, 1},
     {NULL, NULL, 0}
 };
 
