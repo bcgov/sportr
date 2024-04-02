@@ -65,6 +65,21 @@ clim_dat <- get_clim(location) ##yearly climate data
 
 load("../Common_Files/BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
 bgc_ss <- prep_data(clim_dat, BGCmodel, copy(S1), copy(E1), eda) ##bgc predictions
+
+clim_dat[,run_id := interaction(id,GCM,SSP,RUN)]
+temp <- unique(bgc_ss[,.(run_id,PERIOD,BGC)])
+
+clim_plot <- clim_dat[temp, on = c("run_id","PERIOD")]
+clim_plot <- clim_plot[run_id == "1.UKESM1-0-LL.ssp245.r1i1p1f2",]
+
+clim_plot[,PERIOD := as.numeric(PERIOD)]
+ggplot(clim_plot, aes(x = PERIOD, y = DD5)) +
+  geom_line() +
+  geom_text(aes(label = BGC), size = 2)
+
+ggplot(clim_plot, aes(x = PERIOD, y = PPT_JAS)) +
+  geom_line() +
+  geom_text(aes(label = BGC), size = 2)
 ```
 
 # Run Portfolio
