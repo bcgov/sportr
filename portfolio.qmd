@@ -1,13 +1,18 @@
 ---
 title: "Species Portfolio (R)"
 author: "Kiri Daust, Will MacKenzie"
+subtitle: "Application of Modern Portfolio Theory to CCISS"
+execute:
+  echo: false
+  warning: false
+  error: false
+  cache: false
 format: html
 editor: visual
 ---
 
-# Setup
-
-```{r}
+```{r setup}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, cache.lazy = FALSE)
 library(data.table)
 library(climr)
 library(ccissdev)
@@ -24,27 +29,30 @@ library(ranger)
 
 source("optimisation.R")
 source("portfolio_fns.R")
+
+
 ```
 
 ## Create covariance matrix
 
-```{r}
+```{r input of covariance matrix}
 req_trees <- c("Ac", "At", "Bg", "Bl", "Bp", "Cw", "Dr", "Ep", "Fd", 
 "Hm", "Hw", "Jw", "Lw", "Mb", "Pa", "Pl", "Pw", "Py", "Sb", "Ss", 
 "Sx", "Yc")
-#S1 <- fread("D:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
-#sigma_feas <- make_covmat(S1, req_trees)
+S1 <- fread("D:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
+sigma_feas <- make_covmat(S1, req_trees)
 #sigma_feas <- make_covmat(copy(ccissdev::S1),req_trees)
-sigma_feas <- fread("Feasibility_CovMat.csv")
+#sigma_feas <- fread("Feasibility_CovMat.csv")
+load("D:\\CommonTables\\MachineLearningModels\\BGCModel_Extratrees_Balanced.Rdata")
 ```
 
 ## Specify Parameters
 
-```{r}
+```{r choose a locations}
 
-#current_unit <- "SBSdk/01" ##should lookup on map so this is automatic
+current_unit <- "SBSdk/01" ##should lookup on map so this is automatic
 
-location <- data.table(lat =  54.773879,	lon = -127.156558, elev =	500, id = 1)
+location <- data.table(lat =  53.9,	lon = -122.8, elev =	500, id = 1)
 eda <- "C4"
 
 ##mean loss parameters for feasibility (in percentages per year)
@@ -53,7 +61,7 @@ feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" =
 ##currently not using this but likely will
 #change_prob <- data.table(FeasDiff = c(-3,-2,-1,0,1,2,3), PropLoss = c(0,0,0,0,1,1,1))
 
-tree_ls <- c("Fd","Pl","Sx","At","Bl","Cw","Hw","Dr") ##what species to include
+tree_ls <- c("Fd","Pl","Sx","At","Bl","Cw","Hw","Py") ##what species to include
 boundDat <- data.table(Spp = tree_ls) ##set bound on species - no bounds by default
 boundDat[,`:=`(minWt = 0, maxWt = 1)]
 
@@ -61,15 +69,17 @@ boundDat[,`:=`(minWt = 0, maxWt = 1)]
 
 ## Get BGC Predictions
 
-```{r}
+```{r get climate data}
 #| cache: true
 
 clim_dat <- get_clim(location) ##yearly climate data
 ```
 
-```{r}
-load("../Common_Files/BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
-#load("D:\\CommonTables\\MachineLearningModels\\BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
+```{r example annual BGC predictions}
+#| fig-cap: "Annual BGC prediction along selected single climate factors"
+#| out-width: "90%"
+#load("../Common_Files/BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
+# load("D:\\CommonTables\\MachineLearningModels\\BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
 
 bgc_ss <- prep_data(clim_dat, BGCmodel, copy(S1), copy(E1), eda) ##bgc predictions
 
@@ -77,8 +87,11 @@ clim_dat[,run_id := interaction(id,GCM,SSP,RUN)]
 temp <- unique(bgc_ss[,.(run_id,PERIOD,BGC)])
 
 clim_plot <- clim_dat[temp, on = c("run_id","PERIOD")]
-clim_plot <- clim_plot[run_id == "1.UKESM1-0-LL.ssp245.r1i1p1f2",]
 
+#unique(clim_dat$run_id)
+
+#clim_plot <- clim_plot[run_id == "1.UKESM1-0-LL.ssp245.r1i1p1f2",]
+clim_plot <- clim_plot[run_id == "1.CNRM-ESM2-1.ssp245.r2i1p1f2",]
 clim_plot[,PERIOD := as.numeric(PERIOD)]
 ggplot(clim_plot, aes(x = PERIOD, y = DD5)) +
   geom_line() +
@@ -87,7 +100,6 @@ ggplot(clim_plot, aes(x = PERIOD, y = DD5)) +
 ggplot(clim_plot, aes(x = PERIOD, y = PPT_JAS)) +
   geom_line() +
   geom_text(aes(label = BGC), size = 2)
-
 
 ggplot(clim_plot, aes(x = PERIOD, y = CMD)) +
   geom_line() +
@@ -100,49 +112,71 @@ ggplot(clim_plot, aes(x = PERIOD, y = CMD)) +
 portfolio <- run_portfolio(bgc_ss, ccissdev::SIBEC, copy(S1), tree_ls, feas_prob, sigma = NULL) ##sigma = NULL calculate covariance on simulations; set sigma = sigma_feas (calculated above) to use specific covariance matrix
 ```
 
-## Check out the simulations
-
-```{r}
+```{r mean returns for all species}
+#| fig-cap: "Mean returns for all species in portfolio"
+#| out-width: "90%"
+# portfolio2 <- portfolio$Simulation# %>% filter(Spp == "Fd")
+# ggplot(portfolio2, aes(x = Year, y = Returns, col = Spp, group = interaction(It, Spp))) +
+#   geom_line()
+# ggplot(portfolio$Simulation, aes(x = Year, y = Returns, col = Spp, group = interaction(It, Spp))) +
+#   geom_line()
 ggplot(portfolio$Simulation, aes(x = Year, y = Returns, col = Spp)) +
   geom_smooth(method = "loess")
 ```
 
-```{r}
-ggplot(portfolio$Simulation, aes(x = Year, y = Returns, col = Spp, group = interaction(It, Spp))) +
-  geom_line()
+```{r comparisons of estimated returns}
+#| fig-cap: "Comparison of estimated range of returns between Fd and Pl"
+#| out-width: "90%"
+portfolio2 <- portfolio$Simulation %>% filter(Spp %in% c("Fd", "Pl")) %>% group_by(Spp,Year) %>% 
+  mutate(min_val = min(Returns), max_val = max(Returns)) %>% ungroup
+ggplot(portfolio2) +
+  geom_smooth(aes(x = Year, y = Returns, col = Spp))+
+  geom_ribbon(aes(x = Year, ymax = max_val, ymin = min_val, col = Spp, fill = Spp), alpha=0.3)
+  geom_smooth(aes(x = Year, y = Returns), se = TRUE, color = "red")
+# 
+# ggplot(portfolio$Simulation, aes(x = Year, y = Returns, col = Spp)) +
+#   geom_smooth(method = "loess")
 ```
 
-# Plot Portfolio
 
-## Efficient Frontier
 
-```{r}
+## Plot Efficient Frontier of Portfolio
+
+```{r plotting an efficient frontier}
+#| fig-cap: "Modern Portfolio Theory Efficient Frontier"
+#| out-width: "90%"
 plot_ef(portfolio$Portfolio, run_list = portfolio$run_list, current_unit = current_unit, returnValue = 0.9)
 ```
 
-## Violin Plots
+## Comparison of Species Ratio at different Risk levels
 
 Actually turns out boxplots work better here
 
 ```{r}
 max_sharpe <- get_portfolio(portfolio_raw = portfolio$Portfolio, run_list = portfolio$run_list, what = "Sharpe")
-max_sharpe[,Stat := "MaxSharpe"]
+max_sharpe[,Stat := "2MaxSharpe_Optim"]
 
 spec_ret <- get_portfolio(portfolio_raw = portfolio$Portfolio, run_list = portfolio$run_list, what = "Return", return_value = 0.9)
-spec_ret[,Stat := "Return_0.9"]
+spec_ret[,Stat := "1Return_0.9Volume"]
 
 min_sd <- get_portfolio(portfolio_raw = portfolio$Portfolio, run_list = portfolio$run_list, what = "MinSd")
-min_sd[,Stat := "MinRisk"]
+min_sd[,Stat := "3Resilience"]
 
 max_sd <- get_portfolio(portfolio_raw = portfolio$Portfolio, run_list = portfolio$run_list, what = "MaxSd")
-max_sd[,Stat := "MaxReturn"]
+max_sd[,Stat := "0MaxReturn"]
 
 port_all <- rbind(max_sharpe, spec_ret, min_sd, max_sd)
 port_all <- melt(port_all, id.vars = c("SiteNo","Stat"))
 
-ggplot(port_all, aes(x = variable, y = value)) +
-  geom_boxplot() +
-  facet_wrap(~ Stat) +
-  xlab("Species") +
+ggplot(port_all, aes(x = Stat, y = value, fill = variable)) +
+  geom_bar(position = "stack", stat="identity") +
+  #facet_wrap(~ Stat) +
+  xlab("Portfolio Risk Choice") +
   ylab("Weighting")
 ```
+Violin Plots
+This should show the variation in monte carlo simulation return for each portfolio risk choice plus a portfolio of the single best tree species
+```{r}
+
+```
+
