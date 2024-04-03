@@ -32,10 +32,10 @@ source("portfolio_fns.R")
 req_trees <- c("Ac", "At", "Bg", "Bl", "Bp", "Cw", "Dr", "Ep", "Fd", 
 "Hm", "Hw", "Jw", "Lw", "Mb", "Pa", "Pl", "Pw", "Py", "Sb", "Ss", 
 "Sx", "Yc")
-S1 <- fread("D:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
-sigma_feas <- make_covmat(S1, req_trees)
+#S1 <- fread("D:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
+#sigma_feas <- make_covmat(S1, req_trees)
 #sigma_feas <- make_covmat(copy(ccissdev::S1),req_trees)
-#sigma_feas <- fread("Feasibility_CovMat.csv")
+sigma_feas <- fread("Feasibility_CovMat.csv")
 ```
 
 ## Specify Parameters
@@ -63,10 +63,14 @@ boundDat[,`:=`(minWt = 0, maxWt = 1)]
 ## Get BGC Predictions
 
 ```{r}
-clim_dat <- get_clim(location) ##yearly climate data
+#| cache: true
 
-#load("../Common_Files/BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
-load("D:\\CommonTables\\MachineLearningModels\\BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
+clim_dat <- get_clim(location) ##yearly climate data
+```
+
+```{r}
+load("../Common_Files/BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
+#load("D:\\CommonTables\\MachineLearningModels\\BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
 
 bgc_ss <- prep_data(clim_dat, BGCmodel, copy(S1), copy(E1), eda) ##bgc predictions
 
