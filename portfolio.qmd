@@ -29,11 +29,12 @@ source("portfolio_fns.R")
 ## Create covariance matrix
 
 ```{r}
-req_trees <- c("Ac", "Act", "At", "Bg", "Bl", "Bp", "Cw", "Dr", "Ep", "Fd", 
+req_trees <- c("Ac", "At", "Bg", "Bl", "Bp", "Cw", "Dr", "Ep", "Fd", 
 "Hm", "Hw", "Jw", "Lw", "Mb", "Pa", "Pl", "Pw", "Py", "Sb", "Ss", 
 "Sx", "Yc")
-
-sigma_feas <- make_covmat(copy(ccissdev::S1),req_trees)
+S1 <- fread("D:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
+sigma_feas <- make_covmat(S1, req_trees)
+#sigma_feas <- make_covmat(copy(ccissdev::S1),req_trees)
 #sigma_feas <- fread("Feasibility_CovMat.csv")
 ```
 
@@ -64,7 +65,9 @@ boundDat[,`:=`(minWt = 0, maxWt = 1)]
 ```{r}
 clim_dat <- get_clim(location) ##yearly climate data
 
-load("../Common_Files/BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
+#load("../Common_Files/BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
+load("D:\\CommonTables\\MachineLearningModels\\BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
+
 bgc_ss <- prep_data(clim_dat, BGCmodel, copy(S1), copy(E1), eda) ##bgc predictions
 
 clim_dat[,run_id := interaction(id,GCM,SSP,RUN)]
