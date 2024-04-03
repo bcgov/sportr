@@ -32,18 +32,18 @@ source("portfolio_fns.R")
 req_trees <- c("Ac", "At", "Bg", "Bl", "Bp", "Cw", "Dr", "Ep", "Fd", 
 "Hm", "Hw", "Jw", "Lw", "Mb", "Pa", "Pl", "Pw", "Py", "Sb", "Ss", 
 "Sx", "Yc")
-S1 <- fread("D:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
-sigma_feas <- make_covmat(S1, req_trees)
+#S1 <- fread("D:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
+#sigma_feas <- make_covmat(S1, req_trees)
 #sigma_feas <- make_covmat(copy(ccissdev::S1),req_trees)
-#sigma_feas <- fread("Feasibility_CovMat.csv")
+sigma_feas <- fread("Feasibility_CovMat.csv")
 ```
 
 ## Specify Parameters
 
 ```{r}
-current_unit <- "SBSdk1/01" ##should lookup on map so this is automatic
 
-##currently only setup for one point but trivial to expand
+#current_unit <- "SBSdk/01" ##should lookup on map so this is automatic
+
 location <- data.table(lat =  54.773879,	lon = -127.156558, elev =	500, id = 1)
 eda <- "C4"
 
@@ -62,10 +62,14 @@ boundDat[,`:=`(minWt = 0, maxWt = 1)]
 ## Get BGC Predictions
 
 ```{r}
-clim_dat <- get_clim(location) ##yearly climate data
+#| cache: true
 
-#load("../Common_Files/BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
-load("D:\\CommonTables\\MachineLearningModels\\BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
+clim_dat <- get_clim(location) ##yearly climate data
+```
+
+```{r}
+load("../Common_Files/BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
+#load("D:\\CommonTables\\MachineLearningModels\\BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
 
 bgc_ss <- prep_data(clim_dat, BGCmodel, copy(S1), copy(E1), eda) ##bgc predictions
 
@@ -93,10 +97,15 @@ ggplot(clim_plot, aes(x = PERIOD, y = CMD)) +
 # Run Portfolio
 
 ```{r}
-portfolio <- run_portfolio(bgc_ss, ccissdev::SIBEC, copy(S1), tree_ls, feas_prob, sigma = sigma_feas) ##sigma = NULL calculate covariance on simulations; set sigma = sigma_feas (calculated above) to use specific covariance matrix
+portfolio <- run_portfolio(bgc_ss, ccissdev::SIBEC, copy(S1), tree_ls, feas_prob, sigma = NULL) ##sigma = NULL calculate covariance on simulations; set sigma = sigma_feas (calculated above) to use specific covariance matrix
 ```
 
 ## Check out the simulations
+
+```{r}
+ggplot(portfolio$Simulation, aes(x = Year, y = Returns, col = Spp)) +
+  geom_smooth(method = "loess")
+```
 
 ```{r}
 ggplot(portfolio$Simulation, aes(x = Year, y = Returns, col = Spp, group = interaction(It, Spp))) +
@@ -105,6 +114,35 @@ ggplot(portfolio$Simulation, aes(x = Year, y = Returns, col = Spp, group = inter
 
 # Plot Portfolio
 
+## Efficient Frontier
+
 ```{r}
 plot_ef(portfolio$Portfolio, run_list = portfolio$run_list, current_unit = current_unit, returnValue = 0.9)
+```
+
+## Violin Plots
+
+Actually turns out boxplots work better here
+
+```{r}
+max_sharpe <- get_portfolio(portfolio_raw = portfolio$Portfolio, run_list = portfolio$run_list, what = "Sharpe")
+max_sharpe[,Stat := "MaxSharpe"]
+
+spec_ret <- get_portfolio(portfolio_raw = portfolio$Portfolio, run_list = portfolio$run_list, what = "Return", return_value = 0.9)
+spec_ret[,Stat := "Return_0.9"]
+
+min_sd <- get_portfolio(portfolio_raw = portfolio$Portfolio, run_list = portfolio$run_list, what = "MinSd")
+min_sd[,Stat := "MinRisk"]
+
+max_sd <- get_portfolio(portfolio_raw = portfolio$Portfolio, run_list = portfolio$run_list, what = "MaxSd")
+max_sd[,Stat := "MaxReturn"]
+
+port_all <- rbind(max_sharpe, spec_ret, min_sd, max_sd)
+port_all <- melt(port_all, id.vars = c("SiteNo","Stat"))
+
+ggplot(port_all, aes(x = variable, y = value)) +
+  geom_boxplot() +
+  facet_wrap(~ Stat) +
+  xlab("Species") +
+  ylab("Weighting")
 ```

@@ -137,6 +137,35 @@ makeColScale <- function(Trees, TreeCols){
   return(colScale)
 }
 
+get_portfolio <- function(portfolio_raw, run_list, 
+                          what = c("Sharpe","Return","MaxSd","MinSd"), return_value = 0.9){
+  raw2 <- dcast(portfolio_raw, SiteNo + Return ~ Spp)
+  if(what == "Sharpe"){
+    res <- raw2[raw2[,.I[Sharpe == max(Sharpe)], by=SiteNo]$V1]
+    res[,c("Return","RealRet","Sd","Sharpe") := NULL]
+    setnafill(res, type = "const", fill = 0, cols = 2:ncol(res))
+    return(res)
+  }else if(what == "Return"){
+    raw2[,RetDiff := abs(return_value - RealRet)]
+    res <- raw2[raw2[,.I[RetDiff == min(RetDiff)], by=SiteNo]$V1]
+    res[,c("Return","RealRet","Sd","Sharpe","RetDiff") := NULL]
+    setnafill(res, type = "const", fill = 0, cols = 2:ncol(res))
+    return(res)
+  }else if(what == "MaxSd"){
+    res <- raw2[raw2[,.I[Sd == max(Sd)], by=SiteNo]$V1]
+    res[,c("Return","RealRet","Sd","Sharpe") := NULL]
+    setnafill(res, type = "const", fill = 0, cols = 2:ncol(res))
+    return(res)
+  }else if(what == "MinSd"){
+    res <- raw2[raw2[,.I[Sd == min(Sd)], by=SiteNo]$V1]
+    res[,c("Return","RealRet","Sd","Sharpe") := NULL]
+    setnafill(res, type = "const", fill = 0, cols = 2:ncol(res))
+    return(res)
+  }else{
+    stop("Unknown what. Please try again")
+  }
+}
+
 plot_ef <- function(portfolio, run_list, current_unit, returnValue = 0.9){
   efAll <- dcast(portfolio,Return ~ Spp, fun.aggregate = function(x){sum(x)/(length(run_list))})
   efAll <- na.omit(efAll)
