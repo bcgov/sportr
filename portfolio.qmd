@@ -41,10 +41,10 @@ sigma_feas <- make_covmat(S1, req_trees)
 ## Specify Parameters
 
 ```{r}
-current_unit <- "CWHws1/01" ##should lookup on map so this is automatic
+current_unit <- "SBSdk1/01" ##should lookup on map so this is automatic
 
 ##currently only setup for one point but trivial to expand
-location <- data.table(lat = 54.43161,	lon = -128.6196, elev =	163, id = 1)
+location <- data.table(lat =  54.773879,	lon = -127.156558, elev =	500, id = 1)
 eda <- "C4"
 
 ##mean loss parameters for feasibility (in percentages per year)
@@ -81,6 +81,11 @@ ggplot(clim_plot, aes(x = PERIOD, y = DD5)) +
   geom_text(aes(label = BGC), size = 2)
 
 ggplot(clim_plot, aes(x = PERIOD, y = PPT_JAS)) +
+  geom_line() +
+  geom_text(aes(label = BGC), size = 2)
+
+
+ggplot(clim_plot, aes(x = PERIOD, y = CMD)) +
   geom_line() +
   geom_text(aes(label = BGC), size = 2)
 ```
