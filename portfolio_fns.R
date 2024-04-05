@@ -1,12 +1,13 @@
 
 make_covmat <- function(feas, trees_req){
   tempfeas <- feas
+  tempfeas <- tempfeas[!newfeas >3]
   tempfeas <- tempfeas[spp != "",]
   tempfeas <- dcast(tempfeas, ss_nospace ~ spp, value.var = "newfeas", fun.aggregate = mean, na.rm = T)
   tempfeas <- tempfeas[, lapply(.SD, function(x) replace(x, is.nan(x), 5))]
   tempfeas[,ss_nospace := NULL]
   tempfeas <- tempfeas[,..trees_req]
-  simga_full <- cor(tempfeas, method = "kendall")
+  simga_full <- cor(tempfeas, method = "kendall", use = "pairwise.complete.obs")
   return(simga_full)
 }
 
