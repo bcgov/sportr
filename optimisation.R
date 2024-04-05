@@ -84,11 +84,11 @@ optimise_portfolio <- function(returns, cov_matrix, boundDat, minTot){
   start <- rep(1/num_ass,num_ass)
   start <- pmin(start,bounds$maxWt)
   start <- pmax(start,bounds$minWt)
-  result <- slsqp(x0 = start,fn = .portfolio_volatility)#,
-                  # lower = bounds$minWt, upper = bounds$maxWt,
-                  #  heq = eq_constr_ret,
-                  # mean_returns = mean_returns, 
-                  # cov_matrix = cov_matrix)#
+  result <- slsqp(x0 = start,fn = .portfolio_volatility,
+                  lower = bounds$minWt, upper = bounds$maxWt,
+                   heq = eq_constr_ret,
+                  mean_returns = mean_returns,
+                  cov_matrix = cov_matrix)#
   return(result)
 }
 
