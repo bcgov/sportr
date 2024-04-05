@@ -1,13 +1,16 @@
 
 make_covmat <- function(feas, trees_req){
   tempfeas <- feas
-  tempfeas <- tempfeas[!newfeas >3]
   tempfeas <- tempfeas[spp != "",]
+  tempfeas <- tempfeas[!newfeas >3]
+  # tempfeas$newfeas2 <- ifelse(tempfeas$newfeas %in% 3, 1, 
+  #                         ifelse(tempfeas$newfeas %in% 2, 2, 
+  #                                ifelse(tempfeas$newfeas %in% 1, 3, tempfeas$newfeas )))
   tempfeas <- dcast(tempfeas, ss_nospace ~ spp, value.var = "newfeas", fun.aggregate = mean, na.rm = T)
   tempfeas <- tempfeas[, lapply(.SD, function(x) replace(x, is.nan(x), 5))]
   tempfeas[,ss_nospace := NULL]
   tempfeas <- tempfeas[,..trees_req]
-  simga_full <- cor(tempfeas, method = "kendall", use = "pairwise.complete.obs")
+  simga_full <- cor(tempfeas, method = "kendall")#, use = "pairwise.complete.obs")
   return(simga_full)
 }
 
@@ -205,6 +208,6 @@ plot_ef <- function(portfolio, run_list, current_unit, returnValue = 0.9){
     xlab("Max Return --> Minimized Risk")+
     ylab("Portfolio Ratio")+
     guides(fill=guide_legend("Species"))+
-    theme_few()+
-    facet_wrap(.~Unit, scales = "free_x")
+    theme_few()#+
+    #facet_wrap(.~Unit, scales = "free_x")
 }
