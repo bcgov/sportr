@@ -28,36 +28,39 @@ library(ggthemes)
 library(ranger)
 library(corrplot)
 library(RColorBrewer)
+require(labdsv)
 
 source("optimisation.R")
 source("portfolio_fns.R")
 source("corstars.R")
-
-cor.mtest <- function(mat, ...) {
-    mat <- as.matrix(mat)
-    n <- ncol(mat)
-    p.mat<- matrix(NA, n, n)
-    diag(p.mat) <- 0
-    for (i in 1:(n - 1)) {
-        for (j in (i + 1):n) {
-            tmp <- cor.test(mat[, i], mat[, j], ...)
-            p.mat[i, j] <- p.mat[j, i] <- tmp$p.value
-        }
-    }
-  colnames(p.mat) <- rownames(p.mat) <- colnames(mat)
-  p.mat
-}
+source("pairwise_corr.R")
+# 
+# cor.mtest <- function(mat, ...) {
+#     mat <- as.matrix(mat)
+#     n <- ncol(mat)
+#     p.mat<- matrix(NA, n, n)
+#     diag(p.mat) <- 0
+#     for (i in 1:(n - 1)) {
+#         for (j in (i + 1):n) {
+#             tmp <- cor.test(mat[, i], mat[, j], ...)
+#             p.mat[i, j] <- p.mat[j, i] <- tmp$p.value
+#         }
+#     }
+#   colnames(p.mat) <- rownames(p.mat) <- colnames(mat)
+#   p.mat
+# }
 
 ```
 
 ## Create covariance matrix
 
-```{r input of covariance matrix}
+```{r input data}
 req_trees <- c("Ac", "At", "Bg", "Bl", "Cw", "Dr", "Ep", "Fd", 
  "Hm", "Hw", "Lw", "Mb", "Pa", "Pl", "Pw", "Py", "Sb", "Ss", 
  "Sx", "Yc")
  feas <- fread("D:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
-#   sigma_feas <- make_covmat(feas, req_trees)
+   sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
+ sigma_feas2 <- make_covmat(feas, req_trees)
 #   fwrite(as.data.table(sigma_feas, keep.rownames = ""), "Feasibility_CovMat.csv", row.names = FALSE)
 #sigma_feas <- make_covmat(copy(ccissdev::S1),req_trees)
 load("D:\\CommonTables\\MachineLearningModels\\BGCModel_Extratrees_Balanced.Rdata")
@@ -68,12 +71,13 @@ load("D:\\CommonTables\\MachineLearningModels\\BGCModel_Extratrees_Balanced.Rdat
 
 #| fig-cap: "Kendall's correlation between species feasibility ranks"
 #| out-width: "90%"
-sigma_feas <- fread("Feasibility_CovMat.csv") %>% as.matrix(rownames = "V1")
+#sigma_feas <- fread("Feasibility_CovMat.csv") %>% as.matrix(rownames = "V1")
 #M <-cor(sigma_feas)
 p.mat = cor.mtest(sigma_feas, conf.level = 0.95)
-corrplot(sigma_feas, method = 'square', order="hclust", diag = FALSE,tl.col="black", tl.srt=45,  col=brewer.pal(n=8, name="RdYlBu"))#type="both",, p.mat = p.mat, sig.level = 0.05,
+corrplot(sigma_feas, method = 'square', type="lower", order="alpha", diag = FALSE,tl.col="black", tl.srt=45,  col=brewer.pal(n=8, name="RdYlBu"))#,p.mat = p.mat, sig.level = 0.05)
 
-corrplot.mixed(sigma_feas, lower = 'number', upper = 'square', order="hclust" , tl.col="black", tl.srt=45)#, p.mat = p.mat, sig.level = 0.1)#, col=brewer.pal(n=5, name="RdYlBu"))
+corrplot.mixed(sigma_feas2, lower = 'number', upper = 'square', order="alpha" , 
+               tl.col="black", tl.srt=45, number.cex = 12/ncol(sigma_feas))#, p.mat = p.mat, sig.level = 0.1)#, col=brewer.pal(n=5, name="RdYlBu"))
 #corstars(sigma_feas[,1:7], method = "pearson", result="html")
 
 ```
@@ -89,7 +93,7 @@ eda <- "C4"
 
 ##mean loss parameters for feasibility (in percentages per year)
 feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" = c(95,85,60,40))
-
+feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,5,20), "NoMort" = c(95,85,60,10))
 ##currently not using this but likely will
 #change_prob <- data.table(FeasDiff = c(-3,-2,-1,0,1,2,3), PropLoss = c(0,0,0,0,1,1,1))
 
@@ -120,10 +124,10 @@ temp <- unique(bgc_ss[,.(run_id,PERIOD,BGC)])
 
 clim_plot <- clim_dat[temp, on = c("run_id","PERIOD")]
 
-#unique(clim_dat$run_id)
+unique(clim_dat$run_id)
 
 #clim_plot <- clim_plot[run_id == "1.UKESM1-0-LL.ssp245.r1i1p1f2",]
-clim_plot <- clim_plot[run_id == "1.CNRM-ESM2-1.ssp245.r2i1p1f2",]
+clim_plot <- clim_plot[run_id == "1.ACCESS-ESM1-5.ssp245.r10i1p1f1",]
 clim_plot[,PERIOD := as.numeric(PERIOD)]
 ggplot(clim_plot, aes(x = PERIOD, y = DD5)) +
   geom_line() +
@@ -139,9 +143,87 @@ ggplot(clim_plot, aes(x = PERIOD, y = CMD)) +
 ```
 
 # Run Portfolio
-
 ```{r}
-portfolio1 <- run_portfolio(bgc_ss, ccissdev::SIBEC, feas, tree_ls, feas_prob, sigma = NULL) ##sigma = NULL calculate covariance on simulations; set sigma = sigma_feas (calculated above) to use specific covariance matrix
+
+# suit_table = feas
+# sigma   = sigma_feas
+# run_portfolio <- function(bgc_ss, SIBEC, suit_table, tree_ls, feas_prob, sigma = NULL){
+#   sim_ls <- list()
+#   portfolio_ls <- list()
+#   count <- 1
+#   run_ls <- unique(bgc_ss$run_id)
+# 
+#   for(run in run_ls){
+#     ss_run_orig <- bgc_ss[run_id == run,]
+#     setorder(ss_run_orig, PERIOD)
+#     cat(".")
+#     
+#     for(tree in tree_ls){
+#       si_spp <- SIBEC[TreeSpp == tree,]
+#       suit_spp <- suit_table[spp == tree,]
+#       ss_run <- copy(ss_run_orig)
+#       ss_run[si_spp, SI := i.MeanPlotSiteIndex, on = "SS_NoSpace"]
+#       setnafill(ss_run, type = "locf",cols = "SI")
+#       setnafill(ss_run, type = "const", fill = 15, cols = "SI")
+#       ss_run[suit_spp, Feas := i.newfeas, on = c(SS_NoSpace = "ss_nospace")]
+#       setnafill(ss_run, type = "const", fill = 4, cols = "Feas")
+#       ss_sum <- ss_run[,.(SI = mean(SI), Feas = round(mean(Feas))), by = .(PERIOD)]
+#       ss_sum[,FeasRoll := frollmean(Feas, n = 3)]
+#       ss_sum[,FeasDiff := c(NA,diff(Feas))]
+#       ss_sum <- ss_sum[-c(1:3),]
+#       ss_sum[feas_prob, `:=`(Prop_Feas = i.PropLoss, NoMort = i.NoMort), on = "Feas"]
+#       ss_sum <- ss_sum[,.(SI = SI/50, Prop_Feas, FeasDiff, NoMort)]
+#       Returns <- simGrowthCpp(DF = ss_sum)
+#       tmpR <- c(0,Returns)
+#       assets <- Returns - tmpR[-length(tmpR)]
+#       temp <- data.table(Spp = tree, 
+#                          Year = 1:length(Returns), 
+#                          It = run, 
+#                          Returns = Returns)
+#       sim_ls[[count]] <- temp
+#       count <- count + 1
+#       if(tree == tree_ls[1]){
+#         tree_ass <- data.table(Year = 1:length(assets))
+#       }
+#       set(tree_ass, j = tree, value = assets)
+#     }
+#     returns <- tree_ass
+#     returns[,Year := NULL]
+#     ###only include species with mean return > 1 in portfolio
+#     use <- colnames(returns)[colMeans(returns) > stats::quantile(colMeans(returns),0.25)] ###should probably be higher
+#     if(length(use) > 1){
+#       returns <- returns[,..use]
+#       #print(use)
+#       if(is.null(sigma)){
+#         sigma2 <- cor(returns) ###to create cov mat from returns
+#       }else{
+#         sigma2 <- sigma[use,use]
+#       }
+#       
+#       #print(colnames(sigma2))
+#       ef <- optimise_portfolio(returns, sigma2, boundDat, minTot = 0.1) 
+#       setnames(ef,old = c("frontier_sd","return","sharpe"),
+#                new = c("Sd","RealRet","Sharpe"))
+#       ef[,Return := 1:20]
+#       
+#       eff_front2 <- ef
+#       eff_front2[,RealRet := RealRet/max(RealRet)]
+#       eff_front2[,SiteNo := run]
+#       portfolio_ls[[run]] <- melt(eff_front2,id.vars = c("SiteNo", "Return"),variable.name = "Spp")
+#     }
+#   }
+#   
+#   sim_res <- rbindlist(sim_ls)
+#   efAll <- rbindlist(portfolio_ls)
+#   return(list(Simulation = sim_res, Portfolio = efAll, run_list = run_ls))
+# }
+
+```
+
+
+```{r run portfolio}
+##calculate covariance on simulations; set sigma = sigma_feas (calculated above) to use specific covariance matrix
+portfolio1 <- run_portfolio(bgc_ss, ccissdev::SIBEC, feas, tree_ls, feas_prob, sigma = NULL) ##sigma = NULL 
 portfolio2 <- run_portfolio(bgc_ss, ccissdev::SIBEC, feas, tree_ls, feas_prob, sigma = sigma_feas)
 ```
 
@@ -156,7 +238,7 @@ portfolio2 <- run_portfolio(bgc_ss, ccissdev::SIBEC, feas, tree_ls, feas_prob, s
 ggplot(portfolio1$Simulation, aes(x = Year, y = Returns, col = Spp)) +
   geom_smooth(method = "loess")
 ggplot(portfolio2$Simulation, aes(x = Year, y = Returns, col = Spp)) +
-  geom_smooth(method = "loess")
+ geom_smooth(method = "loess")
 
 ```
 
@@ -165,7 +247,7 @@ ggplot(portfolio2$Simulation, aes(x = Year, y = Returns, col = Spp)) +
 #| out-width: "90%"
 portfolio1.sim <- portfolio1$Simulation %>% filter(Spp %in% c("Fd", "Pl")) %>% group_by(Spp,Year) %>% 
   mutate(min_val = min(Returns), max_val = max(Returns)) %>% ungroup
-portfolio2.sim <- portfolio2$Simulation %>% filter(Spp %in% c("Fd", "Pl")) %>% group_by(Spp,Year) %>% 
+portfolio2.sim <- portfolio2$Simulation %>% filter(Spp %in% c("Fd", "Pl")) %>% group_by(Spp,Year) %>%
   mutate(min_val = min(Returns), max_val = max(Returns)) %>% ungroup
 
 ggplot(portfolio1.sim) +
@@ -177,8 +259,7 @@ ggplot(portfolio1.sim) +
   geom_smooth(aes(x = Year, y = Returns, col = Spp))+
   geom_ribbon(aes(x = Year, ymax = max_val, ymin = min_val, col = Spp, fill = Spp), alpha=0.3)
   geom_smooth(aes(x = Year, y = Returns), se = TRUE, color = "red")
-# ggplot(portfolio$Simulation, aes(x = Year, y = Returns, col = Spp)) +
-#   geom_smooth(method = "loess")
+
 ```
 
 
@@ -186,15 +267,15 @@ ggplot(portfolio1.sim) +
 ## Plot Efficient Frontier of Portfolio
 
 ```{r plotting an efficient frontier}
-#| fig-cap: "Modern Portfolio Theory Efficient Frontier"
-#| out-width: "90%"
+# | fig-cap: "Modern Portfolio Theory Efficient Frontier"
+# | out-width: "90%"
 plot_ef(portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
 ```
 
 
 ```{r plotting an efficient frontier2}
-#| fig-cap: "Modern Portfolio Theory Efficient Frontier"
-#| out-width: "90%"
+# | fig-cap: "Modern Portfolio Theory Efficient Frontier Sigma from Feasibility"
+# | out-width: "90%"
 plot_ef(portfolio2$Portfolio, run_list = portfolio2$run_list, current_unit = current_unit, returnValue = 0.9)
 ```
 
@@ -219,8 +300,8 @@ max_sd[,Stat := "0MaxReturn"]
 
 port_all <- rbind(max_sharpe, spec_ret, min_sd, max_sd)
 port_all <- melt(port_all, id.vars = c("SiteNo","Stat"))
-
-ggplot(port_all, aes(x = Stat, y = value, fill = variable)) +
+num_models = length(unique(port_all$SiteNo))
+ggplot(port_all, aes(x = Stat, y = value/num_models, fill = variable)) +
   geom_bar(position = "stack", stat="identity") +
   #facet_wrap(~ Stat) +
   xlab("Portfolio Risk Choice") +
