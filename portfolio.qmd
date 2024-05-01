@@ -58,11 +58,13 @@ source("pairwise_corr.R")
 req_trees <- c("Ac", "At", "Bg", "Bl", "Cw", "Dr", "Ep", "Fd", 
  "Hm", "Hw", "Lw", "Mb", "Pa", "Pl", "Pw", "Py", "Sb", "Ss", 
  "Sx", "Yc")
- feas <- fread("D:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
+ feas <- fread("F:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
    sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
  sigma_feas2 <- make_covmat(feas, req_trees)
 #   fwrite(as.data.table(sigma_feas, keep.rownames = ""), "Feasibility_CovMat.csv", row.names = FALSE)
 #sigma_feas <- make_covmat(copy(ccissdev::S1),req_trees)
+ 
+### Create new model build 
 load("D:\\CommonTables\\MachineLearningModels\\BGCModel_Extratrees_Balanced.Rdata")
 ```
 
