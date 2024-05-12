@@ -26,14 +26,14 @@ addVars <- function(dat) {
 
 
 get_clim <- function(location, years = 2015:2080){
-  vars_needed <- c("DD5", "DD_0_at", "DD_0_wt", "DD5_05", "DD5_06", "DD5_07", 
-                   "DD5_08", "DD5_09", "PPT05", "PPT06", "PPT07", "PPT08", "PPT09", 
-                   "CMD", "PPT_at", "PPT_wt", "CMD05", "CMD06", "CMD07", "CMD08", 
-                   "CMD09", "SHM", "AHM", "NFFD", "PAS", "CMI", "Tmax07")
+  #vars_needed <- c("PPT05", "PPT06", "PPT07", "PPT08", "PPT09",
+                  # "CMD", "PPT_at", "PPT_wt", "CMD07")
+  #vars_needed <- c(vars_needed, vars) %>% unique
   clim_dat <- climr_downscale(location, gcm_models = list_gcm(), gcm_ts_years = years, 
-                              ssp = "ssp245", max_run = 3L, return_normal = FALSE, vars = vars_needed)
+                              ssp = "ssp245", max_run = 3L, return_normal = FALSE, vars = climr::list_variables())
   addVars(clim_dat)
   clim_dat <- clim_dat[!is.nan(CMD.total),]
+
   return(clim_dat)
 }
 
