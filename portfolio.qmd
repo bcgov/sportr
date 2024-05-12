@@ -67,8 +67,7 @@ req_trees <- c("Ac", "At", "Bg", "Bl", "Cw", "Dr", "Ep", "Fd",
  
 ### Create new model build 
 #load("D:\\CommonTables\\MachineLearningModels\\BGCModel_Extratrees_Balanced.Rdata")
-BGCmodel <- readRDS("D:\\GitHub\\Build_WNA_BGC_model\\WNA_BGCv12_9May24_401tree.rds") 
-vars.selected <- BGCmodel$variable.importance %>% as.data.frame() %>% rownames_to_column("var") %>% select(var)
+
 ```
 
 
@@ -108,13 +107,17 @@ boundDat[,`:=`(minWt = 0, maxWt = 1)]
 
 ```
 
-## Get BGC Predictions
+## Get climate data for sites
 
 ```{r get climate data}
-#| cache: true
-
-clim_dat <- get_clim(location) ##yearly climate data
-fwrite(clim_dat, "SBSdw3_site_climate.csv")
+###| cache: true
+# clim_dat <- get_clim(location) ##yearly climate data
+# BGCmodel <- readRDS("D:\\GitHub\\Build_WNA_BGC_model\\WNA_BGCv12_9May24_401tree.rds")
+# vars.selected <- BGCmodel$variable.importance %>% as.data.frame() %>% rownames_to_column("var") %>% select(var)
+# vars <- vars.selected$var
+# clim_dat <- clim_dat %>% dplyr::select(id, GCM, SSP, RUN, PERIOD, all_of(vars))
+# fwrite(clim_dat, "SBSdw3_site_climate.csv")
+clim_dat <- fread("SBSdw3_site_climate.csv")
 ```
 
 ```{r example annual BGC predictions}
@@ -135,7 +138,7 @@ unique(clim_dat$run_id)
 #clim_plot <- clim_plot[run_id == "1.UKESM1-0-LL.ssp245.r1i1p1f2",]
 clim_plot <- clim_plot[run_id == "1.ACCESS-ESM1-5.ssp245.r10i1p1f1",]
 clim_plot[,PERIOD := as.numeric(PERIOD)]
-ggplot(clim_plot, aes(x = PERIOD, y = DD5)) +
+ggplot(clim_plot, aes(x = PERIOD, y = DD5_sp)) +
   geom_line() +
   geom_text(aes(label = BGC), size = 2)
 
@@ -143,9 +146,9 @@ ggplot(clim_plot, aes(x = PERIOD, y = PPT_JAS)) +
   geom_line() +
   geom_text(aes(label = BGC), size = 2)
 
-ggplot(clim_plot, aes(x = PERIOD, y = CMD)) +
+ggplot(clim_plot, aes(x = PERIOD, y = CMD.total)) +
   geom_line() +
-  geom_text(aes(label = BGC), size = 2)
+  geom_text(aes(label = BGC), size = 4)
 ```
 
 # Run Portfolio
