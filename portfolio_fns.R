@@ -25,7 +25,7 @@ addVars <- function(dat) {
 }
 
 
-get_clim <- function(location, years = 2015:2080){
+get_clim <- function(location, years = 2023:2099){
   #vars_needed <- c("PPT05", "PPT06", "PPT07", "PPT08", "PPT09",
                   # "CMD", "PPT_at", "PPT_wt", "CMD07")
   #vars_needed <- c(vars_needed, vars) %>% unique
@@ -57,30 +57,34 @@ prep_data <- function(clim_dat, BGCmodel, suit_table, eda_table, eda = "C4"){
   return(bgc_ss)
 }
 
-run_portfolio <- function(bgc_ss, SIBEC, suit_table, tree_ls, feas_prob, sigma = NULL){
+
+# tree = "Sx"  
+# run="1.ACCESS-ESM1-5.ssp245.r10i1p1f1"
+# suit_table = feas
+run_portfolio <- function(bgc_ss, SIBEC, si_default = 5, suit_table, tree_ls, feas_prob, sigma = NULL){
   sim_ls <- list()
   portfolio_ls <- list()
   count <- 1
   run_ls <- unique(bgc_ss$run_id)
-
   for(run in run_ls){
     ss_run_orig <- bgc_ss[run_id == run,]
     setorder(ss_run_orig, PERIOD)
     cat(".")
-    
+
     for(tree in tree_ls){
       si_spp <- SIBEC[TreeSpp == tree,]
       suit_spp <- suit_table[spp == tree,]
       ss_run <- copy(ss_run_orig)
       ss_run[si_spp, SI := i.MeanPlotSiteIndex, on = "SS_NoSpace"]
-      setnafill(ss_run, type = "locf",cols = "SI")
-      setnafill(ss_run, type = "const", fill = 15, cols = "SI")
+      #setnafill(ss_run, type = "locf",cols = "SI")
+      setnafill(ss_run, type = "const", fill = si_default, cols = "SI")
       ss_run[suit_spp, Feas := i.newfeas, on = c(SS_NoSpace = "ss_nospace")]
       setnafill(ss_run, type = "const", fill = 4, cols = "Feas")
+      ss_run[is.na(ss_run)] <- "unknown"
       ss_sum <- ss_run[,.(SI = mean(SI), Feas = round(mean(Feas))), by = .(PERIOD)]
       ss_sum[,FeasRoll := frollmean(Feas, n = 3)]
       ss_sum[,FeasDiff := c(NA,diff(Feas))]
-      ss_sum <- ss_sum[-c(1:3),]
+      #ss_sum <- ss_sum[-c(1:3),]
       ss_sum[feas_prob, `:=`(Prop_Feas = i.PropLoss, NoMort = i.NoMort), on = "Feas"]
       ss_sum <- ss_sum[,.(SI = SI/50, Prop_Feas, FeasDiff, NoMort)]
       Returns <- simGrowthCpp(DF = ss_sum)
@@ -100,7 +104,7 @@ run_portfolio <- function(bgc_ss, SIBEC, suit_table, tree_ls, feas_prob, sigma =
     returns <- tree_ass
     returns[,Year := NULL]
     ###only include species with mean return > 1 in portfolio
-    use <- colnames(returns)[colMeans(returns) > stats::quantile(colMeans(returns),0.25)] ###should probably be higher
+    use <- colnames(returns)[colMeans(returns) > stats::quantile(colMeans(returns),0.1)] ###removes species with very low returns should probably be higher
     if(length(use) > 1){
       returns <- returns[,..use]
       #print(use)
@@ -111,7 +115,7 @@ run_portfolio <- function(bgc_ss, SIBEC, suit_table, tree_ls, feas_prob, sigma =
       }
       
       #print(colnames(sigma2))
-      ef <- optimise_portfolio(returns, sigma2, boundDat, minTot = 0.1) 
+      ef <- optimise_portfolio(returns, sigma2, boundDat, minTot = 0.05) 
       setnames(ef,old = c("frontier_sd","return","sharpe"),
                new = c("Sd","RealRet","Sharpe"))
       ef[,Return := 1:20]
