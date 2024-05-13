@@ -57,7 +57,7 @@ prep_data <- function(clim_dat, BGCmodel, suit_table, eda_table, eda = "C4"){
   return(bgc_ss)
 }
 
-run_portfolio <- function(bgc_ss, SIBEC, suit_table, tree_ls, feas_prob, sigma = NULL){
+run_portfolio <- function(bgc_ss, SIBEC, si_default = 5, suit_table, tree_ls, feas_prob, si_default = 5, sigma = NULL){
   sim_ls <- list()
   portfolio_ls <- list()
   count <- 1
@@ -74,7 +74,7 @@ run_portfolio <- function(bgc_ss, SIBEC, suit_table, tree_ls, feas_prob, sigma =
       ss_run <- copy(ss_run_orig)
       ss_run[si_spp, SI := i.MeanPlotSiteIndex, on = "SS_NoSpace"]
       #setnafill(ss_run, type = "locf",cols = "SI")
-      setnafill(ss_run, type = "const", fill = 15, cols = "SI")
+      setnafill(ss_run, type = "const", fill = si_default, cols = "SI")
       ss_run[suit_spp, Feas := i.newfeas, on = c(SS_NoSpace = "ss_nospace")]
       setnafill(ss_run, type = "const", fill = 4, cols = "Feas")
       ss_run[is.na(ss_run)] <- "unknown"
