@@ -240,14 +240,10 @@ port_ratios <- function(portfolio, run_list, current_unit, returnValue = 0.9){
     mutate(Spp = rownames(.)) %>% set_colnames(c("Max_Return","Spp"))
   maxSharpe$SSCurrent <- current_unit
   maxSharpe$Set_Return <- ret90Props$Set_Return
-  maxSharpe$Set_Return[maxSharpe$Spp == "Sd"] <- ret90
   maxSharpe$Max_Return <- ret100Props$Max_Return
-  maxSharpe$Max_Return[maxSharpe$Spp == "Sd"] <- ret100
+  maxSharpe <- maxSharpe %>% filter(!Spp == "RealRet") %>% mutate_if(is.numeric, round, 2)
   setDT(maxSharpe)
-  # efAll <- efAll[,-c("Return","Sharpe")]
-  # efAll <- melt(efAll, id.vars = "Sd")
-  # efAll$Unit <- current_unit
-  # efAll <- efAll[is.finite(Sd),]
+  setcolorder(maxSharpe, c("SSCurrent", "Spp", "Max_Return", "Set_Return", "Sharpe_Opt"))
   return(maxSharpe)
 }
 
