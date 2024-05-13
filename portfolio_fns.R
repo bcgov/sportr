@@ -25,7 +25,7 @@ addVars <- function(dat) {
 }
 
 
-get_clim <- function(location, years = 2015:2080){
+get_clim <- function(location, years = 2023:2099){
   #vars_needed <- c("PPT05", "PPT06", "PPT07", "PPT08", "PPT09",
                   # "CMD", "PPT_at", "PPT_wt", "CMD07")
   #vars_needed <- c(vars_needed, vars) %>% unique
