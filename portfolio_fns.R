@@ -176,6 +176,7 @@ get_portfolio <- function(portfolio_raw, run_list,
 #portfolio = portfolio1$Portfolio; run_list = run_ls; current_unit = current_unit; returnValue = 0.9
 
 plot_ef <- function(portfolio, run_list, current_unit, returnValue = 0.9){
+  portfolio <- portfolio[!is.infinite(value),]
   efAll <- dcast(portfolio,Return ~ Spp, fun.aggregate = function(x){sum(x)/(length(run_list))})
   efAll <- na.omit(efAll)
   RetCurve <- stats::approx(efAll$RealRet,efAll$Sd,xout = returnValue)
@@ -253,3 +254,4 @@ port_ratios <- function(portfolio, run_list, current_unit, returnValue = 0.9){
   # efAll <- efAll[is.finite(Sd),]
   return(maxSharpe)
 }
+
