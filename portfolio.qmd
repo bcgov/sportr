@@ -59,14 +59,17 @@ source("pairwise_corr.R")
 req_trees <- c("Ac", "At", "Bg", "Bl", "Cw", "Dr", "Ep", "Fd", 
  "Hm", "Hw", "Lw", "Mb", "Pa", "Pl", "Pw", "Py", "Sb", "Ss", 
  "Sx", "Yc")
- feas <- fread("D:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
-   sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
+#feas <- fread("D:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
+feas <- fread("F:\\OneDrive - Personal\\OneDrive\\WNA_BGC\\Feasibility_v12_15_DVM.csv")
+sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
  sigma_feas2 <- make_covmat(feas, req_trees)
+sibec <-  ccissdev::SIBEC
 #   fwrite(as.data.table(sigma_feas, keep.rownames = ""), "Feasibility_CovMat.csv", row.names = FALSE)
 #sigma_feas <- make_covmat(copy(ccissdev::S1),req_trees)
  
 ### Create new model build 
 #load("D:\\CommonTables\\MachineLearningModels\\BGCModel_Extratrees_Balanced.Rdata")
+BGCmodel <- readRDS("D:\\GitHub\\Build_WNA_BGC_model\\WNA_BGCv12_10May24.rds")
 
 ```
 
@@ -97,11 +100,11 @@ eda <- "C4"
 
 ##mean loss parameters for feasibility (in percentages per year)
 feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" = c(95,85,60,40))
-feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,5,20), "NoMort" = c(95,85,60,10))
+feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.1, 0.1, 0.1), "NoMort" = c(95,95, 95,95))
 ##currently not using this but likely will
 #change_prob <- data.table(FeasDiff = c(-3,-2,-1,0,1,2,3), PropLoss = c(0,0,0,0,1,1,1))
 
-tree_ls <- c("Fd","Pl","Sx","At","Bl","Cw","Hw","Py", "Ep", "Pw", "Lw") ##what species to include
+tree_ls <- c("Fd","Pl","Sx")#,"At","Bl","Cw","Hw","Py", "Ep", "Pw", "Lw") ##what species to include
 boundDat <- data.table(Spp = tree_ls) ##set bound on species - no bounds by default
 boundDat[,`:=`(minWt = 0, maxWt = 1)]
 
@@ -133,40 +136,49 @@ temp <- unique(bgc_ss[,.(run_id,PERIOD,BGC)])
 
 clim_plot <- clim_dat[temp, on = c("run_id","PERIOD")]
 
-unique(clim_dat$run_id)
+xx <- unique(clim_dat$run_id) %>% as.data.frame
 
 #clim_plot <- clim_plot[run_id == "1.UKESM1-0-LL.ssp245.r1i1p1f2",]
+#models <- clim_plot$run_id %>% select(contains)
 clim_plot <- clim_plot[run_id == "1.ACCESS-ESM1-5.ssp245.r10i1p1f1",]
+
 clim_plot[,PERIOD := as.numeric(PERIOD)]
 ggplot(clim_plot, aes(x = PERIOD, y = DD5_sp)) +
   geom_line() +
-  geom_text(aes(label = BGC), size = 2)
+  geom_text(aes(label = BGC), size = 4)
 
 ggplot(clim_plot, aes(x = PERIOD, y = PPT_JAS)) +
   geom_line() +
-  geom_text(aes(label = BGC), size = 2)
+  geom_text(aes(label = BGC), size = 4)
 
 ggplot(clim_plot, aes(x = PERIOD, y = CMD.total)) +
   geom_line() +
   geom_text(aes(label = BGC), size = 4)
+
+###Summarize the number of BC vs non-BC years
+# 
+# yy <- clim_plot %>% select(BGC) %>% count(BGC)
+# zz <- clim_plot %>% select(PERIOD, BGC) %>% arrange(PERIOD) %>% mutate(bgc = BGC)
+# feas2 <- feas %>% filter(spp %in% "Pl")
+# zz <- left_join(zz, feas2) %>% filter %>% select(bgc) %>% distinct
 ```
 
 # Run Portfolio
 ```{r}
 
-# suit_table = feas
+#  suit_table = feas
 # sigma   = sigma_feas
 # run_portfolio <- function(bgc_ss, SIBEC, suit_table, tree_ls, feas_prob, sigma = NULL){
 #   sim_ls <- list()
 #   portfolio_ls <- list()
 #   count <- 1
 #   run_ls <- unique(bgc_ss$run_id)
-# 
+#   run <- "1.ACCESS-ESM1-5.ssp245.r10i1p1f1"
 #   for(run in run_ls){
 #     ss_run_orig <- bgc_ss[run_id == run,]
 #     setorder(ss_run_orig, PERIOD)
 #     cat(".")
-#     
+# tree = "Pl"
 #     for(tree in tree_ls){
 #       si_spp <- SIBEC[TreeSpp == tree,]
 #       suit_spp <- suit_table[spp == tree,]
@@ -185,9 +197,9 @@ ggplot(clim_plot, aes(x = PERIOD, y = CMD.total)) +
 #       Returns <- simGrowthCpp(DF = ss_sum)
 #       tmpR <- c(0,Returns)
 #       assets <- Returns - tmpR[-length(tmpR)]
-#       temp <- data.table(Spp = tree, 
-#                          Year = 1:length(Returns), 
-#                          It = run, 
+#       temp <- data.table(Spp = tree,
+#                          Year = 1:length(Returns),
+#                          It = run,
 #                          Returns = Returns)
 #       sim_ls[[count]] <- temp
 #       count <- count + 1
@@ -208,20 +220,20 @@ ggplot(clim_plot, aes(x = PERIOD, y = CMD.total)) +
 #       }else{
 #         sigma2 <- sigma[use,use]
 #       }
-#       
+# 
 #       #print(colnames(sigma2))
-#       ef <- optimise_portfolio(returns, sigma2, boundDat, minTot = 0.1) 
+#       ef <- optimise_portfolio(returns, sigma2, boundDat, minTot = 0.1)
 #       setnames(ef,old = c("frontier_sd","return","sharpe"),
 #                new = c("Sd","RealRet","Sharpe"))
 #       ef[,Return := 1:20]
-#       
+# 
 #       eff_front2 <- ef
 #       eff_front2[,RealRet := RealRet/max(RealRet)]
 #       eff_front2[,SiteNo := run]
 #       portfolio_ls[[run]] <- melt(eff_front2,id.vars = c("SiteNo", "Return"),variable.name = "Spp")
 #     }
 #   }
-#   
+# 
 #   sim_res <- rbindlist(sim_ls)
 #   efAll <- rbindlist(portfolio_ls)
 #   return(list(Simulation = sim_res, Portfolio = efAll, run_list = run_ls))
@@ -254,9 +266,9 @@ ggplot(portfolio2$Simulation, aes(x = Year, y = Returns, col = Spp)) +
 ```{r comparisons of estimated returns}
 #| fig-cap: "Comparison of estimated range of returns between Fd and Pl"
 #| out-width: "90%"
-portfolio1.sim <- portfolio1$Simulation %>% filter(Spp %in% c("Fd", "Pl")) %>% group_by(Spp,Year) %>% 
+portfolio1.sim <- portfolio1$Simulation %>% filter(Spp %in% tree_ls) %>% group_by(Spp,Year) %>% 
   mutate(min_val = min(Returns), max_val = max(Returns)) %>% ungroup
-portfolio2.sim <- portfolio2$Simulation %>% filter(Spp %in% c("Fd", "Pl")) %>% group_by(Spp,Year) %>%
+portfolio2.sim <- portfolio2$Simulation %>% filter(Spp %in% tree_ls) %>% group_by(Spp,Year) %>%
   mutate(min_val = min(Returns), max_val = max(Returns)) %>% ungroup
 
 ggplot(portfolio1.sim) +
