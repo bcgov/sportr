@@ -45,13 +45,13 @@ req_trees <- c("Ac", "At", "Bg", "Bl", "Cw", "Dr", "Ep", "Fd",
  "Hm", "Hw", "Lw", "Mb", "Pa", "Pl", "Pw", "Py", "Sb", "Ss", 
  "Sx", "Yc")
 
-#feas <- fread("D:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
-feas <- fread("F:\\OneDrive - Personal\\OneDrive\\WNA_BGC\\Feasibility_v12_15_DVM.csv")
-# sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
+feas <- fread("../CCISS_ShinyApp/data-raw/data_tables/Feasibility_v12_15.csv")
+#feas <- fread("F:\\OneDrive - Personal\\OneDrive\\WNA_BGC\\Feasibility_v12_15_DVM.csv")
+sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
 #  sigma_feas2 <- make_covmat(feas, req_trees)
 sibec <-  ccissdev::SIBEC
 #load("D:\\CommonTables\\MachineLearningModels\\BGCModel_Extratrees_Balanced.Rdata")
-BGCmodel <- readRDS("D:\\GitHub\\Build_WNA_BGC_model\\WNA_BGCv12_10May24.rds")
+BGCmodel <- readRDS("../Common_Files/WNA_BGCv12_10May24.rds")
 
 ```
 
@@ -76,8 +76,8 @@ corrplot(sigma_feas, method = 'square', type="lower", order="alpha", diag = FALS
 
 current_unit <- "SBSdw3/01" ##should lookup on map so this is automatic
 location <- data.table(lat =  53.8,	lon = -123.1, elev =	700, id = 1)
-current_unit <- "IDFdk3/01"
-location <- data.table(lat =  51.3,	lon = -121.4, elev =	1085, id = 1)
+# current_unit <- "IDFdk3/01"
+# location <- data.table(lat =  51.3,	lon = -121.4, elev =	1085, id = 1)
  eda <- "C4"
 
 ##mean loss parameters for feasibility (in percentages per year)
@@ -103,7 +103,7 @@ boundDat[,`:=`(minWt = 0, maxWt = 1)]
 # clim_dat <- clim_dat %>% dplyr::select(id, GCM, SSP, RUN, PERIOD, all_of(vars))
 # #fwrite(clim_dat, "SBSdw3_site_climate.csv")
 # fwrite(clim_dat, "IDFdk3_site_climate.csv")
-#clim_dat <- fread("IDFdk3_site_climate.csv")
+clim_dat <- fread("SBSdw3_site_climate.csv")
 ```
 
 ```{r bgc predictions for portfolio}
@@ -113,7 +113,9 @@ bgc_ss <- prep_data(clim_dat, BGCmodel, copy(feas), copy(E1), eda) ##bgc predict
 clim_dat[,run_id := interaction(id,GCM,SSP,RUN)]
 temp <- unique(bgc_ss[,.(run_id,PERIOD,BGC)])
 ```
+
 ## Run portfolios
+
 ```{r run portfolios}
 tree_ls <- c("Fd","Pl","Sx","Bl","Cw","Hw","Py", "Pw", "Lw")#"At","Ep",
 feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" = c(95,85,60,40))
@@ -128,7 +130,9 @@ yy <- plot_ef(portfolio = portfolio2$Portfolio, run_list = portfolio2$run_list, 
 require(ggpubr)
 ggarrange(xx,yy)
 ```
+
 ### Examine annual BGC projections
+
 ```{r example annual BGC predictions}
 #| fig-cap: "Annual BGC prediction along selected single climate factors"
 #| out-width: "90%"
@@ -163,6 +167,7 @@ ggplot(clim_plot, aes(x = PERIOD, y = CMD.total)) +
 ```
 
 ### Graphic to summarize source of BGC predictions
+
 ```{r example annual BGC predictions}
 ###Summarize the number of BC vs non-BC years
 # 
@@ -177,7 +182,7 @@ ggplot(clim_plot, aes(x = PERIOD, y = CMD.total)) +
 ```{r run portfolio}
 ##calculate covariance on simulations; set sigma = sigma_feas (calculated above) to use specific covariance matrix
 tree_ls <- tree_ls[tree_ls != "Pw"]
-portfolio1 <- run_portfolio(bgc_ss, ccissdev::SIBEC, feas, tree_ls2, feas_prob, sigma = NULL) ##sigma = NULL 
+portfolio1 <- run_portfolio(bgc_ss, ccissdev::SIBEC, feas, tree_ls, feas_prob, sigma = NULL) ##sigma = NULL 
 portfolio2 <- run_portfolio(bgc_ss, ccissdev::SIBEC, feas, tree_ls, feas_prob, sigma = sigma_feas)
 
 returns <- fread("TestPortfolio.csv")
@@ -186,7 +191,6 @@ lines(returns$Sx, type = "l")
 lines(returns$At, type = "l")
 lines(returns$Lw, type = "l", col = "red")
 ```
-
 
 ```{r mean returns for all species}
 #| fig-cap: "Mean returns for all species in portfolio"
