@@ -181,8 +181,6 @@ plot_ef <- function(portfolio, run_list, current_unit, returnValue = 0.9){
   efAll <- na.omit(efAll)
   RetCurve <- stats::approx(efAll$RealRet,efAll$Sd,xout = returnValue)
   ret90 <- RetCurve$y
-   RetCurve2 <- stats::approx(efAll$RealRet,efAll$Sd,xout = 1)
-   ret100 <- RetCurve2$y
   maxSharpe <- efAll[Sharpe == max(Sharpe),!c("Return","Sharpe")]
   maxSPos <- maxSharpe$Sd
   maxSharpe <- t(maxSharpe) %>% as.data.frame() %>%
@@ -196,8 +194,6 @@ plot_ef <- function(portfolio, run_list, current_unit, returnValue = 0.9){
   maxSharpe$SSCurrent <- current_unit
   maxSharpe$Set_Return <- ret90Props$Set_Return
   maxSharpe$Set_Return[maxSharpe$Spp == "Sd"] <- ret90
-  maxSharpe$Max_Return <- ret100Props$Max_Return
-  maxSharpe$Max_Return[maxSharpe$Spp == "Sd"] <- ret100
   setDT(maxSharpe)
   efAll <- efAll[,-c("Return","Sharpe")]
   efAll <- melt(efAll, id.vars = "Sd")
