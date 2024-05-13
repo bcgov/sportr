@@ -173,12 +173,15 @@ get_portfolio <- function(portfolio_raw, run_list,
     stop("Unknown what. Please try again")
   }
 }
+#portfolio = portfolio1$Portfolio; run_list = run_ls; current_unit = current_unit; returnValue = 0.9
 
 plot_ef <- function(portfolio, run_list, current_unit, returnValue = 0.9){
   efAll <- dcast(portfolio,Return ~ Spp, fun.aggregate = function(x){sum(x)/(length(run_list))})
   efAll <- na.omit(efAll)
   RetCurve <- stats::approx(efAll$RealRet,efAll$Sd,xout = returnValue)
   ret90 <- RetCurve$y
+   RetCurve2 <- stats::approx(efAll$RealRet,efAll$Sd,xout = 1)
+   ret100 <- RetCurve2$y
   maxSharpe <- efAll[Sharpe == max(Sharpe),!c("Return","Sharpe")]
   maxSPos <- maxSharpe$Sd
   maxSharpe <- t(maxSharpe) %>% as.data.frame() %>%
@@ -186,9 +189,14 @@ plot_ef <- function(portfolio, run_list, current_unit, returnValue = 0.9){
   ret90Props <- efAll[which.min(abs(RealRet - returnValue)),-c("Return","Sharpe")]
   ret90Props <- t(ret90Props) %>% as.data.frame() %>%
     mutate(Spp = rownames(.)) %>% set_colnames(c("Set_Return","Spp"))
+  ret100Props <- efAll[which.min(abs(RealRet - 1)),-c("Return","Sharpe")]
+  ret100Props <- t(ret100Props) %>% as.data.frame() %>%
+    mutate(Spp = rownames(.)) %>% set_colnames(c("Max_Return","Spp"))
   maxSharpe$SSCurrent <- current_unit
   maxSharpe$Set_Return <- ret90Props$Set_Return
   maxSharpe$Set_Return[maxSharpe$Spp == "Sd"] <- ret90
+  maxSharpe$Max_Return <- ret100Props$Max_Return
+  maxSharpe$Max_Return[maxSharpe$Spp == "Sd"] <- ret100
   setDT(maxSharpe)
   efAll <- efAll[,-c("Return","Sharpe")]
   efAll <- melt(efAll, id.vars = "Sd")
@@ -214,4 +222,34 @@ plot_ef <- function(portfolio, run_list, current_unit, returnValue = 0.9){
     guides(fill=guide_legend("Species"))+
     theme_few()#+
     #facet_wrap(.~Unit, scales = "free_x")
+}
+
+port_ratios <- function(portfolio, run_list, current_unit, returnValue = 0.9){
+  efAll <- dcast(portfolio,Return ~ Spp, fun.aggregate = function(x){sum(x)/(length(run_list))})
+  efAll <- na.omit(efAll)
+  RetCurve <- stats::approx(efAll$RealRet,efAll$Sd,xout = returnValue)
+  ret90 <- RetCurve$y
+  RetCurve2 <- stats::approx(efAll$RealRet,efAll$Sd,xout = 1)
+  ret100 <- RetCurve2$y
+  maxSharpe <- efAll[Sharpe == max(Sharpe),!c("Return","Sharpe")]
+  maxSPos <- maxSharpe$Sd
+  maxSharpe <- t(maxSharpe) %>% as.data.frame() %>%
+    mutate(Spp = rownames(.)) %>% set_colnames(c("Sharpe_Opt","Spp"))
+  ret90Props <- efAll[which.min(abs(RealRet - returnValue)),-c("Return","Sharpe")]
+  ret90Props <- t(ret90Props) %>% as.data.frame() %>%
+    mutate(Spp = rownames(.)) %>% set_colnames(c("Set_Return","Spp"))
+  ret100Props <- efAll[which.min(abs(RealRet - 1)),-c("Return","Sharpe")]
+  ret100Props <- t(ret100Props) %>% as.data.frame() %>%
+    mutate(Spp = rownames(.)) %>% set_colnames(c("Max_Return","Spp"))
+  maxSharpe$SSCurrent <- current_unit
+  maxSharpe$Set_Return <- ret90Props$Set_Return
+  maxSharpe$Set_Return[maxSharpe$Spp == "Sd"] <- ret90
+  maxSharpe$Max_Return <- ret100Props$Max_Return
+  maxSharpe$Max_Return[maxSharpe$Spp == "Sd"] <- ret100
+  setDT(maxSharpe)
+  # efAll <- efAll[,-c("Return","Sharpe")]
+  # efAll <- melt(efAll, id.vars = "Sd")
+  # efAll$Unit <- current_unit
+  # efAll <- efAll[is.finite(Sd),]
+  return(maxSharpe)
 }
