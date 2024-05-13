@@ -241,9 +241,13 @@ port_ratios <- function(portfolio, run_list, current_unit, returnValue = 0.9){
   maxSharpe$SSCurrent <- current_unit
   maxSharpe$Set_Return <- ret90Props$Set_Return
   maxSharpe$Max_Return <- ret100Props$Max_Return
-  maxSharpe <- maxSharpe %>% filter(!Spp == "RealRet") %>% mutate_if(is.numeric, round, 2)
+  maxSharpe$Sharpe_Opt <- as.numeric(maxSharpe$Sharpe_Opt)
+  maxSharpe <- maxSharpe %>% 
+      filter(!Spp %in% c("Sd", "RealRet")) %>% 
+      mutate_if(is.numeric, round, 2)
   setDT(maxSharpe)
-  setcolorder(maxSharpe, c("SSCurrent", "Spp", "Max_Return", "Set_Return", "Sharpe_Opt"))
+ setcolorder(maxSharpe, c("SSCurrent", "Spp", "Max_Return", "Set_Return", "Sharpe_Opt"))
+ setorder(maxSharpe, -Max_Return)
   return(maxSharpe)
 }
 
