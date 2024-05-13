@@ -30,7 +30,8 @@ library(corrplot)
 library(RColorBrewer)
 require(labdsv)
 require(tidyverse)
-
+require(gt)
+require(janitor)
 source("optimisation.R")
 source("portfolio_fns.R")
 source("corstars.R")
@@ -80,8 +81,8 @@ corrplot(sigma_feas, method = 'square', type="lower", order="alpha", diag = FALS
 
 current_unit <- "SBSdw3/01" ##should lookup on map so this is automatic
 location <- data.table(lat =  53.8,	lon = -123.1, elev =	700, id = 1)
-current_unit <- "IDFdk3/01"
-location <- data.table(lat =  51.3,	lon = -121.4, elev =	1085, id = 1)
+# current_unit <- "IDFdk3/01"
+# location <- data.table(lat =  51.3,	lon = -121.4, elev =	1085, id = 1)
  eda <- "C4"
 
 ##mean loss parameters for feasibility (in percentages per year)
@@ -90,7 +91,7 @@ feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" =
 ##currently not using this but likely will
 #change_prob <- data.table(FeasDiff = c(-3,-2,-1,0,1,2,3), PropLoss = c(0,0,0,0,1,1,1))
 
-tree_ls <- c("Fd","Pl","Sx","At","Bl","Cw","Hw","Py","Ep", "Pw", "Lw") ##what species to include
+tree_ls <- c("Fd","Pl","Sx","At","Bl","Cw","Hw","Py","Ep","Pw", "Lw", "Ac", "Bg") ##what species to include
 boundDat <- data.table(Spp = tree_ls) ##set bound on species - no bounds by default
 boundDat[,`:=`(minWt = 0, maxWt = 1)]
 
@@ -111,26 +112,37 @@ boundDat[,`:=`(minWt = 0, maxWt = 1)]
 ```
 
 ```{r bgc predictions for portfolio}
-clim_dat <- fread("IDFdk3_site_climate.csv")
-#clim_dat <- fread("SBSdw3_site_climate.csv")
+#clim_dat <- fread("IDFdk3_site_climate.csv")
+clim_dat <- fread("SBSdw3_site_climate.csv")
 bgc_ss <- prep_data(clim_dat, BGCmodel, copy(feas), copy(E1), eda) ##bgc predictions
 clim_dat[,run_id := interaction(id,GCM,SSP,RUN)]
 temp <- unique(bgc_ss[,.(run_id,PERIOD,BGC)])
 ```
+
 ## Run portfolios
 ```{r run portfolios}
-tree_ls <- c("Fd","Pl","Sx","Bl","Cw","Hw","Py", "Pw", "Lw")#"At","Ep",
-feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" = c(95,85,60,40))
+tree_ls <- c("Fd", "Pl", "Sx","Bl", "Cw", "Hw", "Py", "Pw", "Lw", "At", "Ep", "Ac", "Bg")
+feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,10), "NoMort" = c(95,85,60,40))
 #feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.1, 0.1, 0.1), "NoMort" = c(95,95, 95,95))
-portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 5, feas, tree_ls, feas_prob, sigma = NULL)
+portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 7, feas, tree_ls, feas_prob, sigma = NULL)
 xx <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
+plot(xx)
+port1.ratios <- port_ratios(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9) %>% adorn_totals()
+gt(port1.ratios)
+# portfolio2 <- run_portfolio(bgc_ss, sibec, si_default = 12, feas, tree_ls, feas_prob, sigma = sigma_feas)
+# yy <- plot_ef(portfolio = portfolio2$Portfolio, run_list = portfolio2$run_list, current_unit = current_unit, returnValue = 0.9)
+# #currently not using this but likely will
+# #change_prob <- data.table(FeasDiff = c(-3,-2,-1,0,1,2,3), PropLoss = c(0,0,0,0,1,1,1))
+# require(ggpubr)
+# ggarrange(xx,yy)
+```
 
-portfolio2 <- run_portfolio(bgc_ss, sibec, si_default = 5, feas, tree_ls, feas_prob, sigma = sigma_feas)
-yy <- plot_ef(portfolio = portfolio2$Portfolio, run_list = portfolio2$run_list, current_unit = current_unit, returnValue = 0.9)
-#currently not using this but likely will
-#change_prob <- data.table(FeasDiff = c(-3,-2,-1,0,1,2,3), PropLoss = c(0,0,0,0,1,1,1))
-require(ggpubr)
-ggarrange(xx,yy)
+
+```{r run portfolios}
+port1.ratios <- port_ratios(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
+port2.ratios <- port_ratios(portfolio = portfolio2$Portfolio, run_list = portfolio2$run_list, current_unit = current_unit, returnValue = 0.9)
+
+
 ```
 ### Examine annual BGC projections
 ```{r example annual BGC predictions}
@@ -220,7 +232,7 @@ plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, curren
 ```{r plotting an efficient frontier2}
 # | fig-cap: "Modern Portfolio Theory Efficient Frontier Sigma from Feasibility"
 # | out-width: "90%"
-plot_ef(portfolio2$Portfolio, run_list = portfolio2$run_list, current_unit = current_unit, returnValue = 0.9)
+ plot_ef(portfolio2$Portfolio, run_list = portfolio2$run_list, current_unit = current_unit, returnValue = 0.9)
 ```
 
 ## Comparison of Species Ratio at different Risk levels
