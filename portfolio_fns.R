@@ -57,17 +57,20 @@ prep_data <- function(clim_dat, BGCmodel, suit_table, eda_table, eda = "C4"){
   return(bgc_ss)
 }
 
+
+# tree = "Sx"  
+# run="1.ACCESS-ESM1-5.ssp245.r10i1p1f1"
+# suit_table = feas
 run_portfolio <- function(bgc_ss, SIBEC, si_default = 5, suit_table, tree_ls, feas_prob, sigma = NULL){
   sim_ls <- list()
   portfolio_ls <- list()
   count <- 1
   run_ls <- unique(bgc_ss$run_id)
-
   for(run in run_ls){
     ss_run_orig <- bgc_ss[run_id == run,]
     setorder(ss_run_orig, PERIOD)
     cat(".")
-    
+
     for(tree in tree_ls){
       si_spp <- SIBEC[TreeSpp == tree,]
       suit_spp <- suit_table[spp == tree,]
