@@ -134,15 +134,13 @@ ggarrange(xx,yy)
 #| out-width: "90%"
 #load("../Common_Files/BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
 ##load bgc model
-<<<<<<< HEAD
+
 BGCmodel <- readRDS("../Common_Files/WNA_BGCv12_10May24.rds")
 bgc_ss <- prep_data(clim_dat, BGCmodel, copy(feas), copy(E1), eda) ##bgc predictions
 
 clim_dat[,run_id := interaction(id,GCM,SSP,RUN)]
 temp <- unique(bgc_ss[,.(run_id,PERIOD,BGC)])
 
-=======
->>>>>>> 113832c75a2d02d65de43f957b7a6457bae0de31
 clim_plot <- clim_dat[temp, on = c("run_id","PERIOD")]
 xx <- unique(clim_dat$run_id) %>% as.data.frame
 
@@ -175,84 +173,6 @@ ggplot(clim_plot, aes(x = PERIOD, y = CMD.total)) +
 ```
 
 # Run Portfolio
-<<<<<<< HEAD
-
-```{r}
-
-#  suit_table = feas
-# sigma   = sigma_feas
-# run_portfolio <- function(bgc_ss, SIBEC, suit_table, tree_ls, feas_prob, sigma = NULL){
-#   sim_ls <- list()
-#   portfolio_ls <- list()
-#   count <- 1
-#   run_ls <- unique(bgc_ss$run_id)
-#   run <- "1.ACCESS-ESM1-5.ssp245.r10i1p1f1"
-#   for(run in run_ls){
-#     ss_run_orig <- bgc_ss[run_id == run,]
-#     setorder(ss_run_orig, PERIOD)
-#     cat(".")
-# tree = "Pl"
-#     for(tree in tree_ls){
-#       si_spp <- SIBEC[TreeSpp == tree,]
-#       suit_spp <- suit_table[spp == tree,]
-#       ss_run <- copy(ss_run_orig)
-#       ss_run[si_spp, SI := i.MeanPlotSiteIndex, on = "SS_NoSpace"]
-#       setnafill(ss_run, type = "locf",cols = "SI")
-#       setnafill(ss_run, type = "const", fill = 15, cols = "SI")
-#       ss_run[suit_spp, Feas := i.newfeas, on = c(SS_NoSpace = "ss_nospace")]
-#       setnafill(ss_run, type = "const", fill = 4, cols = "Feas")
-#       ss_sum <- ss_run[,.(SI = mean(SI), Feas = round(mean(Feas))), by = .(PERIOD)]
-#       ss_sum[,FeasRoll := frollmean(Feas, n = 3)]
-#       ss_sum[,FeasDiff := c(NA,diff(Feas))]
-#       ss_sum <- ss_sum[-c(1:3),]
-#       ss_sum[feas_prob, `:=`(Prop_Feas = i.PropLoss, NoMort = i.NoMort), on = "Feas"]
-#       ss_sum <- ss_sum[,.(SI = SI/50, Prop_Feas, FeasDiff, NoMort)]
-#       Returns <- simGrowthCpp(DF = ss_sum)
-#       tmpR <- c(0,Returns)
-#       assets <- Returns - tmpR[-length(tmpR)]
-#       temp <- data.table(Spp = tree,
-#                          Year = 1:length(Returns),
-#                          It = run,
-#                          Returns = Returns)
-#       sim_ls[[count]] <- temp
-#       count <- count + 1
-#       if(tree == tree_ls[1]){
-#         tree_ass <- data.table(Year = 1:length(assets))
-#       }
-#       set(tree_ass, j = tree, value = assets)
-#     }
-#     returns <- tree_ass
-#     returns[,Year := NULL]
-#     ###only include species with mean return > 1 in portfolio
-#     use <- colnames(returns)[colMeans(returns) > stats::quantile(colMeans(returns),0.25)] ###should probably be higher
-#     if(length(use) > 1){
-#       returns <- returns[,..use]
-#       #print(use)
-#       if(is.null(sigma)){
-#         sigma2 <- cor(returns) ###to create cov mat from returns
-#       }else{
-#         sigma2 <- sigma[use,use]
-#       }
-# 
-#       #print(colnames(sigma2))
-#       ef <- optimise_portfolio(returns, sigma2, boundDat, minTot = 0.1)
-#       setnames(ef,old = c("frontier_sd","return","sharpe"),
-#                new = c("Sd","RealRet","Sharpe"))
-#       ef[,Return := 1:20]
-# 
-#       eff_front2 <- ef
-#       eff_front2[,RealRet := RealRet/max(RealRet)]
-#       eff_front2[,SiteNo := run]
-#       portfolio_ls[[run]] <- melt(eff_front2,id.vars = c("SiteNo", "Return"),variable.name = "Spp")
-#     }
-#   }
-# 
-#   sim_res <- rbindlist(sim_ls)
-#   efAll <- rbindlist(portfolio_ls)
-#   return(list(Simulation = sim_res, Portfolio = efAll, run_list = run_ls))
-# }
-
-```
 
 ```{r run portfolio}
 ##calculate covariance on simulations; set sigma = sigma_feas (calculated above) to use specific covariance matrix
@@ -266,8 +186,7 @@ lines(returns$Sx, type = "l")
 lines(returns$At, type = "l")
 lines(returns$Lw, type = "l", col = "red")
 ```
-=======
->>>>>>> 113832c75a2d02d65de43f957b7a6457bae0de31
+
 
 ```{r mean returns for all species}
 #| fig-cap: "Mean returns for all species in portfolio"
@@ -309,12 +228,9 @@ ggplot(portfolio1.sim) +
 ```{r plotting an efficient frontier}
 # | fig-cap: "Modern Portfolio Theory Efficient Frontier"
 # | out-width: "90%"
-<<<<<<< HEAD
 
-plot_ef(portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
-=======
 plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
->>>>>>> 113832c75a2d02d65de43f957b7a6457bae0de31
+
 ```
 
 ```{r plotting an efficient frontier2}
