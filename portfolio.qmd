@@ -30,7 +30,8 @@ library(corrplot)
 library(RColorBrewer)
 require(labdsv)
 require(tidyverse)
-
+require(gt)
+require(janitor)
 source("optimisation.R")
 source("portfolio_fns.R")
 source("corstars.R")
@@ -45,15 +46,21 @@ req_trees <- c("Ac", "At", "Bg", "Bl", "Cw", "Dr", "Ep", "Fd",
  "Hm", "Hw", "Lw", "Mb", "Pa", "Pl", "Pw", "Py", "Sb", "Ss", 
  "Sx", "Yc")
 
+
 feas <- fread("../CCISS_ShinyApp/data-raw/data_tables/Feasibility_v12_15.csv")
 #feas <- fread("F:\\OneDrive - Personal\\OneDrive\\WNA_BGC\\Feasibility_v12_15_DVM.csv")
 sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
+#feas <- fread("D:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
+feas <- fread("F:\\OneDrive - Personal\\OneDrive\\WNA_BGC\\Feasibility_v12_15_DVM.csv")
+# sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
+
 #  sigma_feas2 <- make_covmat(feas, req_trees)
 sibec <-  ccissdev::SIBEC
-#load("D:\\CommonTables\\MachineLearningModels\\BGCModel_Extratrees_Balanced.Rdata")
+
 BGCmodel <- readRDS("../Common_Files/WNA_BGCv12_10May24.rds")
 
 ```
+
 
 ```{r}
 
@@ -86,7 +93,7 @@ feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" =
 ##currently not using this but likely will
 #change_prob <- data.table(FeasDiff = c(-3,-2,-1,0,1,2,3), PropLoss = c(0,0,0,0,1,1,1))
 
-tree_ls <- c("Fd","Pl","Sx","At","Bl","Cw","Hw","Py","Ep", "Pw", "Lw") ##what species to include
+tree_ls <- c("Fd","Pl","Sx","At","Bl","Cw","Hw","Py","Ep","Pw", "Lw", "Ac", "Bg") ##what species to include
 boundDat <- data.table(Spp = tree_ls) ##set bound on species - no bounds by default
 boundDat[,`:=`(minWt = 0, maxWt = 1)]
 
@@ -107,8 +114,8 @@ clim_dat <- fread("SBSdw3_site_climate.csv")
 ```
 
 ```{r bgc predictions for portfolio}
-clim_dat <- fread("IDFdk3_site_climate.csv")
-#clim_dat <- fread("SBSdw3_site_climate.csv")
+#clim_dat <- fread("IDFdk3_site_climate.csv")
+clim_dat <- fread("SBSdw3_site_climate.csv")
 bgc_ss <- prep_data(clim_dat, BGCmodel, copy(feas), copy(E1), eda) ##bgc predictions
 clim_dat[,run_id := interaction(id,GCM,SSP,RUN)]
 temp <- unique(bgc_ss[,.(run_id,PERIOD,BGC)])
@@ -117,18 +124,28 @@ temp <- unique(bgc_ss[,.(run_id,PERIOD,BGC)])
 ## Run portfolios
 
 ```{r run portfolios}
-tree_ls <- c("Fd","Pl","Sx","Bl","Cw","Hw","Py", "Pw", "Lw")#"At","Ep",
-feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" = c(95,85,60,40))
+tree_ls <- c("Fd", "Pl", "Sx","Bl", "Cw", "Hw", "Py", "Pw", "Lw", "At", "Ep", "Ac", "Bg")
+feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,10), "NoMort" = c(95,85,60,40))
 #feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.1, 0.1, 0.1), "NoMort" = c(95,95, 95,95))
-portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 5, feas, tree_ls, feas_prob, sigma = NULL)
+portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 7, feas, tree_ls, feas_prob, sigma = NULL)
 xx <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
+plot(xx)
+port1.ratios <- port_ratios(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9) %>% adorn_totals()
+gt(port1.ratios)
+# portfolio2 <- run_portfolio(bgc_ss, sibec, si_default = 12, feas, tree_ls, feas_prob, sigma = sigma_feas)
+# yy <- plot_ef(portfolio = portfolio2$Portfolio, run_list = portfolio2$run_list, current_unit = current_unit, returnValue = 0.9)
+# #currently not using this but likely will
+# #change_prob <- data.table(FeasDiff = c(-3,-2,-1,0,1,2,3), PropLoss = c(0,0,0,0,1,1,1))
+# require(ggpubr)
+# ggarrange(xx,yy)
+```
 
-portfolio2 <- run_portfolio(bgc_ss, sibec, si_default = 5, feas, tree_ls, feas_prob, sigma = sigma_feas)
-yy <- plot_ef(portfolio = portfolio2$Portfolio, run_list = portfolio2$run_list, current_unit = current_unit, returnValue = 0.9)
-#currently not using this but likely will
-#change_prob <- data.table(FeasDiff = c(-3,-2,-1,0,1,2,3), PropLoss = c(0,0,0,0,1,1,1))
-require(ggpubr)
-ggarrange(xx,yy)
+
+```{r run portfolios}
+port1.ratios <- port_ratios(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
+port2.ratios <- port_ratios(portfolio = portfolio2$Portfolio, run_list = portfolio2$run_list, current_unit = current_unit, returnValue = 0.9)
+
+
 ```
 
 ### Examine annual BGC projections
@@ -138,13 +155,6 @@ ggarrange(xx,yy)
 #| out-width: "90%"
 #load("../Common_Files/BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
 ##load bgc model
-
-BGCmodel <- readRDS("../Common_Files/WNA_BGCv12_10May24.rds")
-bgc_ss <- prep_data(clim_dat, BGCmodel, copy(feas), copy(E1), eda) ##bgc predictions
-
-clim_dat[,run_id := interaction(id,GCM,SSP,RUN)]
-temp <- unique(bgc_ss[,.(run_id,PERIOD,BGC)])
-
 clim_plot <- clim_dat[temp, on = c("run_id","PERIOD")]
 xx <- unique(clim_dat$run_id) %>% as.data.frame
 
@@ -192,6 +202,7 @@ lines(returns$At, type = "l")
 lines(returns$Lw, type = "l", col = "red")
 ```
 
+
 ```{r mean returns for all species}
 #| fig-cap: "Mean returns for all species in portfolio"
 #| out-width: "90%"
@@ -227,20 +238,21 @@ ggplot(portfolio1.sim) +
 
 ```
 
+
+
 ## Plot Efficient Frontier of Portfolio
 
 ```{r plotting an efficient frontier}
 # | fig-cap: "Modern Portfolio Theory Efficient Frontier"
 # | out-width: "90%"
-
 plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
-
 ```
+
 
 ```{r plotting an efficient frontier2}
 # | fig-cap: "Modern Portfolio Theory Efficient Frontier Sigma from Feasibility"
 # | out-width: "90%"
-plot_ef(portfolio2$Portfolio, run_list = portfolio2$run_list, current_unit = current_unit, returnValue = 0.9)
+ plot_ef(portfolio2$Portfolio, run_list = portfolio2$run_list, current_unit = current_unit, returnValue = 0.9)
 ```
 
 ## Comparison of Species Ratio at different Risk levels
@@ -275,9 +287,8 @@ tree.ratio.graph(portfolio1)
 tree.ratio.graph(portfolio2)
 
 ```
-
-Violin Plots This should show the variation in monte carlo simulation return for each portfolio risk choice plus a portfolio of the single best tree species
-
+Violin Plots
+This should show the variation in monte carlo simulation return for each portfolio risk choice plus a portfolio of the single best tree species
 ```{r}
 
 
@@ -286,3 +297,4 @@ Violin Plots This should show the variation in monte carlo simulation return for
 ```{r}
 
 ```
+
