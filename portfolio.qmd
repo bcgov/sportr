@@ -36,21 +36,6 @@ source("portfolio_fns.R")
 source("corstars.R")
 source("pairwise_corr.R")
 # 
-# cor.mtest <- function(mat, ...) {
-#     mat <- as.matrix(mat)
-#     n <- ncol(mat)
-#     p.mat<- matrix(NA, n, n)
-#     diag(p.mat) <- 0
-#     for (i in 1:(n - 1)) {
-#         for (j in (i + 1):n) {
-#             tmp <- cor.test(mat[, i], mat[, j], ...)
-#             p.mat[i, j] <- p.mat[j, i] <- tmp$p.value
-#         }
-#     }
-#   colnames(p.mat) <- rownames(p.mat) <- colnames(mat)
-#   p.mat
-# }
-
 ```
 
 ## Create covariance matrix
@@ -95,9 +80,9 @@ corrplot(sigma_feas, method = 'square', type="lower", order="alpha", diag = FALS
 
 current_unit <- "SBSdw3/01" ##should lookup on map so this is automatic
 location <- data.table(lat =  53.8,	lon = -123.1, elev =	700, id = 1)
-current_unit <- "IDFdk3/01" 
+current_unit <- "IDFdk3/01"
 location <- data.table(lat =  51.3,	lon = -121.4, elev =	1085, id = 1)
-eda <- "C4"
+ eda <- "C4"
 
 ##mean loss parameters for feasibility (in percentages per year)
 feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" = c(95,85,60,40))
@@ -125,39 +110,35 @@ boundDat[,`:=`(minWt = 0, maxWt = 1)]
 #clim_dat <- fread("IDFdk3_site_climate.csv")
 ```
 
-
 ```{r bgc predictions for portfolio}
-clim_dat <- fread("SBSdw3_site_climate.csv")
+clim_dat <- fread("IDFdk3_site_climate.csv")
+#clim_dat <- fread("SBSdw3_site_climate.csv")
 bgc_ss <- prep_data(clim_dat, BGCmodel, copy(feas), copy(E1), eda) ##bgc predictions
 clim_dat[,run_id := interaction(id,GCM,SSP,RUN)]
 temp <- unique(bgc_ss[,.(run_id,PERIOD,BGC)])
 ```
-
+## Run portfolios
 ```{r run portfolios}
 tree_ls <- c("Fd","Pl","Sx","Bl","Cw","Hw","Py", "Pw", "Lw")#"At","Ep",
 feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" = c(95,85,60,40))
 #feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.1, 0.1, 0.1), "NoMort" = c(95,95, 95,95))
-portfolio1 <- run_portfolio(bgc_ss, ccissdev::SIBEC, feas, tree_ls, feas_prob, sigma = NULL)
+portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 5, feas, tree_ls, feas_prob, sigma = NULL)
 xx <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
 
-portfolio2 <- run_portfolio(bgc_ss, ccissdev::SIBEC, feas, tree_ls, feas_prob, sigma = sigma_feas)
+portfolio2 <- run_portfolio(bgc_ss, sibec, si_default = 5, feas, tree_ls, feas_prob, sigma = sigma_feas)
 yy <- plot_ef(portfolio = portfolio2$Portfolio, run_list = portfolio2$run_list, current_unit = current_unit, returnValue = 0.9)
 #currently not using this but likely will
 #change_prob <- data.table(FeasDiff = c(-3,-2,-1,0,1,2,3), PropLoss = c(0,0,0,0,1,1,1))
 require(ggpubr)
 ggarrange(xx,yy)
 ```
-
+### Examine annual BGC projections
 ```{r example annual BGC predictions}
 #| fig-cap: "Annual BGC prediction along selected single climate factors"
 #| out-width: "90%"
 #load("../Common_Files/BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
 ##load bgc model
-
-
-
 clim_plot <- clim_dat[temp, on = c("run_id","PERIOD")]
-
 xx <- unique(clim_dat$run_id) %>% as.data.frame
 
 #clim_plot <- clim_plot[run_id == "1.UKESM1-0-LL.ssp245.r1i1p1f2",]
@@ -176,7 +157,10 @@ ggplot(clim_plot, aes(x = PERIOD, y = PPT_JAS)) +
 ggplot(clim_plot, aes(x = PERIOD, y = CMD.total)) +
   geom_line() +
   geom_text(aes(label = BGC), size = 4)
+```
 
+### Graphic to summarize source of BGC predictions
+```{r example annual BGC predictions}
 ###Summarize the number of BC vs non-BC years
 # 
 # yy <- clim_plot %>% select(BGC) %>% count(BGC)
@@ -186,100 +170,6 @@ ggplot(clim_plot, aes(x = PERIOD, y = CMD.total)) +
 ```
 
 # Run Portfolio
-```{r}
-
-#  suit_table = feas
-# sigma   = sigma_feas
-# run_portfolio <- function(bgc_ss, SIBEC, suit_table, tree_ls, feas_prob, sigma = NULL){
-#   sim_ls <- list()
-#   portfolio_ls <- list()
-#   count <- 1
-#   run_ls <- unique(bgc_ss$run_id)
-#   run <- "1.ACCESS-ESM1-5.ssp245.r10i1p1f1"
-#   for(run in run_ls){
-#     ss_run_orig <- bgc_ss[run_id == run,]
-#     setorder(ss_run_orig, PERIOD)
-#     cat(".")
-# tree = "Fd"
-#     for(tree in tree_ls){
-#       si_spp <- SIBEC[TreeSpp == tree,]
-#       suit_spp <- suit_table[spp == tree,]
-#       ss_run <- copy(ss_run_orig)
-#       ss_run[si_spp, SI := i.MeanPlotSiteIndex, on = "SS_NoSpace"]
-#       setnafill(ss_run, type = "locf",cols = "SI")
-#       setnafill(ss_run, type = "const", fill = 15, cols = "SI")
-#       ss_run[suit_spp, Feas := i.newfeas, on = c(SS_NoSpace = "ss_nospace")]
-#       setnafill(ss_run, type = "const", fill = 4, cols = "Feas")
-#       ss_run[is.na(ss_run)] <- "unknown"
-#       ss_sum <- ss_run[,.(SI = mean(SI), Feas = round(mean(Feas))), by = .(PERIOD)]
-#       ss_sum[,FeasRoll := frollmean(Feas, n = 3)]
-#       ss_sum[,FeasDiff := c(NA,diff(Feas))]
-#       ss_sum <- ss_sum[-c(1:3),]
-#       ss_sum[feas_prob, `:=`(Prop_Feas = i.PropLoss, NoMort = i.NoMort), on = "Feas"]
-#       ss_sum <- ss_sum[,.(SI = SI/50, Prop_Feas, FeasDiff, NoMort)]
-#       Returns <- simGrowthCpp(DF = ss_sum)
-#       tmpR <- c(0,Returns)
-#       assets <- Returns - tmpR[-length(tmpR)]
-#       temp <- data.table(Spp = tree,
-#                          Year = 1:length(Returns),
-#                          It = run,
-#                          Returns = Returns)
-#       sim_ls[[count]] <- temp
-#       count <- count + 1
-#       if(tree == tree_ls[1]){
-#         tree_ass <- data.table(Year = 1:length(assets))
-#       }
-#       set(tree_ass, j = tree, value = assets)
-#     }
-#     returns <- tree_ass
-#     returns[,Year := NULL]
-#     ###only include species with mean return > 1 in portfolio
-#     use <- colnames(returns)[colMeans(returns) > stats::quantile(colMeans(returns),0.25)] ###should probably be higher
-#     if(length(use) > 1){
-#       returns <- returns[,..use]
-#       #print(use)
-#       if(is.null(sigma)){
-#         sigma2 <- cor(returns) ###to create cov mat from returns
-#       }else{
-#         sigma2 <- sigma[use,use]
-#       }
-# 
-#       #print(colnames(sigma2))
-#       ef <- optimise_portfolio(returns, sigma2, boundDat, minTot = 0.1)
-#       setnames(ef,old = c("frontier_sd","return","sharpe"),
-#                new = c("Sd","RealRet","Sharpe"))
-#       ef[,Return := 1:20]
-# 
-#       eff_front2 <- ef
-#       eff_front2[,RealRet := RealRet/max(RealRet)]
-#       eff_front2[,SiteNo := run]
-#       portfolio_ls[[run]] <- melt(eff_front2,id.vars = c("SiteNo", "Return"),variable.name = "Spp")
-#     }
-#   }
-# 
-#   sim_res <- rbindlist(sim_ls)
-#   efAll <- rbindlist(portfolio_ls)
-#   return(list(Simulation = sim_res, Portfolio = efAll, run_list = run_ls))
-# }
-
-```
-
-```{r}
-tree_ls <- c("Fd","Pl","Sx","At","Bl","Cw","Hw","Py","Ep", "Pw", "Lw")
-feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" = c(95,85,60,40))
-#feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.1, 0.1, 0.1), "NoMort" = c(95,95, 95,95))
-portfolio1 <- run_portfolio(bgc_ss, ccissdev::SIBEC, feas, tree_ls, feas_prob, sigma = NULL)
-plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
-#currently not using this but likely will
-#change_prob <- data.table(FeasDiff = c(-3,-2,-1,0,1,2,3), PropLoss = c(0,0,0,0,1,1,1))
-```
-
-tree_ls <- c("Fd","Pl","Sx","At","Bl","Cw","Hw","Py","Ep", "Pw", "Lw")
-```{r run portfolio}
-##calculate covariance on simulations; set sigma = sigma_feas (calculated above) to use specific covariance matrix
-portfolio1 <- run_portfolio(bgc_ss, ccissdev::SIBEC, feas, tree_ls, feas_prob, sigma = NULL) ##sigma = NULL 
-portfolio2 <- run_portfolio(bgc_ss, ccissdev::SIBEC, feas, tree_ls, feas_prob, sigma = sigma_feas)
-```
 
 ```{r mean returns for all species}
 #| fig-cap: "Mean returns for all species in portfolio"
