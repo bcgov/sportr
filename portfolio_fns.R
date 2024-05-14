@@ -61,12 +61,18 @@ prep_data <- function(clim_dat, BGCmodel, suit_table, eda_table, eda = "C4"){
 # tree = "Sx"  
 # run="1.ACCESS-ESM1-5.ssp245.r10i1p1f1"
 # suit_table = feas
-run_portfolio <- function(bgc_ss, SIBEC, si_default = 5, suit_table, tree_ls, feas_prob, sigma = NULL){
+run_portfolio <- function(bgc_ss, SIBEC, si_default = 5, suit_table, 
+                          tree_ls, feas_prob, n_sim = 10, sigma = NULL){
   sim_ls <- list()
   portfolio_ls <- list()
+  return_ls <- list()
   count <- 1
   run_ls <- unique(bgc_ss$run_id)
+  run_sim <- rep(1:length(run_ls), n_sim)
+  run_count <- 1
+  run_ls <- rep(run_ls, each = n_sim)
   for(run in run_ls){
+    run_nm <- paste0(run,run_sim[run_count])
     ss_run_orig <- bgc_ss[run_id == run,]
     setorder(ss_run_orig, PERIOD)
     cat(".")
@@ -119,17 +125,24 @@ run_portfolio <- function(bgc_ss, SIBEC, si_default = 5, suit_table, tree_ls, fe
       setnames(ef,old = c("frontier_sd","return","sharpe"),
                new = c("Sd","RealRet","Sharpe"))
       ef[,Return := 1:20]
+      max_sd <- ef[20,RealRet]
+      min_sd <- ef[1,RealRet]
+      max_sharpe <- ef[which.min(Sharpe),RealRet]
+      return_ls[[run_nm]] <- data.table(MaxSD = max_sd, MinSD = min_sd, Sharpe = max_sharpe)
       
       eff_front2 <- ef
       eff_front2[,RealRet := RealRet/max(RealRet)]
       eff_front2[,SiteNo := run]
-      portfolio_ls[[run]] <- melt(eff_front2,id.vars = c("SiteNo", "Return"),variable.name = "Spp")
+      portfolio_ls[[run_nm]] <- melt(eff_front2,id.vars = c("SiteNo", "Return"),variable.name = "Spp")
     }
+    run_count <- run_count + 1
   }
   
   sim_res <- rbindlist(sim_ls)
+  ret_res <- rbindlist(return_ls)
   efAll <- rbindlist(portfolio_ls)
-  return(list(Simulation = sim_res, Portfolio = efAll, run_list = run_ls))
+  return(list(Simulation = sim_res, Portfolio = efAll, 
+              Return_Values = ret_res, run_list = run_ls))
 }
 
 makeColScale <- function(Trees, TreeCols){
