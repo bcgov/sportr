@@ -45,17 +45,19 @@ source("pairwise_corr.R")
 req_trees <- c("Ac", "At", "Bg", "Bl", "Cw", "Dr", "Ep", "Fd", 
  "Hm", "Hw", "Lw", "Mb", "Pa", "Pl", "Pw", "Py", "Sb", "Ss", 
  "Sx", "Yc")
+
+
+feas <- fread("../CCISS_ShinyApp/data-raw/data_tables/Feasibility_v12_15.csv")
+#feas <- fread("F:\\OneDrive - Personal\\OneDrive\\WNA_BGC\\Feasibility_v12_15_DVM.csv")
+sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
 #feas <- fread("D:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
 feas <- fread("F:\\OneDrive - Personal\\OneDrive\\WNA_BGC\\Feasibility_v12_15_DVM.csv")
 # sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
+
 #  sigma_feas2 <- make_covmat(feas, req_trees)
 sibec <-  ccissdev::SIBEC
-#   fwrite(as.data.table(sigma_feas, keep.rownames = ""), "Feasibility_CovMat.csv", row.names = FALSE)
-#sigma_feas <- make_covmat(copy(ccissdev::S1),req_trees)
- 
-### Create new model build 
-#load("D:\\CommonTables\\MachineLearningModels\\BGCModel_Extratrees_Balanced.Rdata")
-BGCmodel <- readRDS("D:\\GitHub\\Build_WNA_BGC_model\\WNA_BGCv12_10May24.rds")
+
+BGCmodel <- readRDS("../Common_Files/WNA_BGCv12_10May24.rds")
 
 ```
 
@@ -111,7 +113,7 @@ vars <- vars.selected$var
 clim_dat <- clim_dat %>% dplyr::select(id, GCM, SSP, RUN, PERIOD, DD5, all_of(vars))
 fwrite(clim_dat, "SBSmc2_site_climate.csv")
 # fwrite(clim_dat, "IDFdk3_site_climate.csv")
-# clim_dat <- fread("IDFdk3_site_climate.csv")
+clim_dat <- fread("SBSdw3_site_climate.csv")
 ```
 
 ```{r bgc predictions for portfolio}
@@ -125,6 +127,7 @@ temp <- unique(bgc_ss[,.(run_id,PERIOD,BGC)])
 ```
 
 ## Run portfolios
+
 ```{r run portfolios}
 tree_ls <- c("Fd", "Pl", "Sx", "Py", "Lw", "Hw", "Cw", "Py")#,"Bl", "Cw", "Hw", "Py", "Pw", "Lw", "At", "Ep", "Ac", "Bg")
 feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" = c(95,85,70,50))
@@ -142,7 +145,16 @@ gt(port1.ratios)
 # ggarrange(xx,yy)
 ```
 
+```{r run portfolios}
+port1.ratios <- port_ratios(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
+port2.ratios <- port_ratios(portfolio = portfolio2$Portfolio, run_list = portfolio2$run_list, current_unit = current_unit, returnValue = 0.9)
+
+
+```
+
+
 ### Examine annual BGC projections
+
 ```{r example annual BGC predictions}
 #| fig-cap: "Annual BGC prediction along selected single climate factors"
 #| out-width: "90%"
@@ -191,6 +203,7 @@ ggplot(xx, aes(x = Returns.PERIOD, y = Returns.Feas, fill = Spp)) +
 ```
 
 ### Graphic to summarize source of BGC predictions
+
 ```{r example annual BGC predictions}
 ###Summarize the number of BC vs non-BC years
 # 
@@ -201,6 +214,20 @@ ggplot(xx, aes(x = Returns.PERIOD, y = Returns.Feas, fill = Spp)) +
 ```
 
 # Run Portfolio
+
+```{r run portfolio}
+##calculate covariance on simulations; set sigma = sigma_feas (calculated above) to use specific covariance matrix
+tree_ls <- tree_ls[tree_ls != "Pw"]
+portfolio1 <- run_portfolio(bgc_ss, ccissdev::SIBEC, feas, tree_ls, feas_prob, sigma = NULL) ##sigma = NULL 
+portfolio2 <- run_portfolio(bgc_ss, ccissdev::SIBEC, feas, tree_ls, feas_prob, sigma = sigma_feas)
+
+returns <- fread("TestPortfolio.csv")
+plot(returns$Pl, type = "l")
+lines(returns$Sx, type = "l")
+lines(returns$At, type = "l")
+lines(returns$Lw, type = "l", col = "red")
+```
+
 
 ```{r mean returns for all species}
 #| fig-cap: "Mean returns for all species in portfolio"
