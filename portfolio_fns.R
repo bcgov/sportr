@@ -173,7 +173,7 @@ get_portfolio <- function(portfolio_raw, run_list,
     stop("Unknown what. Please try again")
   }
 }
-#portfolio = portfolio1$Portfolio; run_list = run_ls; current_unit = current_unit; returnValue = 0.9
+portfolio = portfolio1$Portfolio; run_list = run_ls; current_unit = current_unit; returnValue = 0.9
 
 plot_ef <- function(portfolio, run_list, current_unit, returnValue = 0.9){
   portfolio <- portfolio[!is.infinite(value),]
@@ -251,3 +251,43 @@ port_ratios <- function(portfolio, run_list, current_unit, returnValue = 0.9){
   return(maxSharpe)
 }
 
+sibec_by_year <- function(bgc_ss, SIBEC, si_default = 5, suit_table, tree_ls, GCM_run){
+  sim_ls <- list()
+  #portfolio_ls <- list()
+  # count <- 1
+  #run_ls <- unique(bgc_ss$run_id)
+  #for(run in run_ls){
+  ss_run_orig <- bgc_ss[run_id == GCM_run,]
+  setorder(ss_run_orig, PERIOD)
+  cat(".")
+ # temp2 <- fread("sibec_return_template.csv") %>% filter(is.na(Spp))
+    for(tree in tree_ls){
+    si_spp <- SIBEC[TreeSpp == tree,]
+    suit_spp <- suit_table[spp == tree,]
+    ss_run <- copy(ss_run_orig)
+    ss_run[si_spp, SI := i.MeanPlotSiteIndex, on = "SS_NoSpace"]
+    #setnafill(ss_run, type = "locf",cols = "SI")
+    setnafill(ss_run, type = "const", fill = si_default, cols = "SI")
+    ss_run[suit_spp, Feas := i.newfeas, on = c(SS_NoSpace = "ss_nospace")]
+    setnafill(ss_run, type = "const", fill = 4, cols = "Feas")
+    ss_run[is.na(ss_run)] <- "unknown"
+    ss_sum <- ss_run[,.(SI = mean(SI), Feas = round(mean(Feas))), by = .(PERIOD)]
+    # ss_sum[,FeasRoll := frollmean(Feas, n = 3)]
+    #ss_sum[,FeasDiff := c(NA,diff(Feas))]
+    #ss_sum <- ss_sum[-c(1:3),]
+    #ss_sum[feas_prob, `:=`(Prop_Feas = i.PropLoss, NoMort = i.NoMort), on = "Feas"]
+    #ss_sum <- ss_sum[,.(SI = SI/50, Prop_Feas, FeasDiff, NoMort)]
+    #Returns <- simGrowthCpp(DF = ss_sum)
+    #tmpR <- c(0,Returns)
+    #assets <- Returns - tmpR[-length(tmpR)]
+    temp <- data.table(Spp = tree, 
+                       Year = 1:length(ss_sum), 
+                       It = run, 
+                       Returns =  ss_sum)
+    
+  sim_ls[[tree]] <- temp
+
+    }
+ temp2 <- rbindlist(sim_ls)
+  return(temp2)
+}
