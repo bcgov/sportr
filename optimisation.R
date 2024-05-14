@@ -27,6 +27,10 @@ optimise_portfolio <- function(returns, cov_matrix, boundDat, minTot){
   ##remove low weight species and re-optimise
   while(length(mean_returns) > 1){
     ##maybe temp
+    if(length(mean_returns) == 1){
+      warning("Only one speces left, no optimisation necessary.")
+      return (NULL)
+    }
     target <- .set_target(mean_returns,cov_matrix)
     testRet <- target[1]+0.5 ## test both ends of the frontier
     testPort <- .efficient_return(mean_returns,cov_matrix,testRet,bndNew)$par
