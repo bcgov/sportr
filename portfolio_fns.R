@@ -115,7 +115,7 @@ run_portfolio <- function(bgc_ss, SIBEC, si_default = 5, suit_table, tree_ls, fe
       }
       
       #print(colnames(sigma2))
-      ef <- optimise_portfolio(returns, sigma2, boundDat, minTot = 0.05) 
+      ef <- optimise_portfolio(returns, sigma2, boundDat, minTot = 0.01) 
       setnames(ef,old = c("frontier_sd","return","sharpe"),
                new = c("Sd","RealRet","Sharpe"))
       ef[,Return := 1:20]
