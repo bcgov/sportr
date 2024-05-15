@@ -138,9 +138,9 @@ run_portfolio <- function(bgc_ss, SIBEC, si_default = 5, suit_table,
     run_count <- run_count + 1
   }
   
-  sim_res <- rbindlist(sim_ls)
-  ret_res <- rbindlist(return_ls)
-  efAll <- rbindlist(portfolio_ls)
+  sim_res <- rbindlist(sim_ls, idcol = "runid")
+  ret_res <- rbindlist(return_ls, idcol = "runid")
+  efAll <- rbindlist(portfolio_ls, idcol = "runid")
   return(list(Simulation = sim_res, Portfolio = efAll, 
               Return_Values = ret_res, run_list = run_ls))
 }
@@ -158,27 +158,27 @@ makeColScale <- function(Trees, TreeCols){
   return(colScale)
 }
 
-get_portfolio <- function(portfolio_raw, run_list, 
+get_portfolio <- function(portfolio_raw, 
                           what = c("Sharpe","Return","MaxSd","MinSd"), return_value = 0.9){
-  raw2 <- dcast(portfolio_raw, SiteNo + Return ~ Spp)
+  raw2 <- dcast(portfolio_raw, runid + Return ~ Spp)
   if(what == "Sharpe"){
-    res <- raw2[raw2[,.I[Sharpe == max(Sharpe)], by=SiteNo]$V1]
+    res <- raw2[raw2[,.I[Sharpe == max(Sharpe)], by=runid]$V1]
     res[,c("Return","RealRet","Sd","Sharpe") := NULL]
     setnafill(res, type = "const", fill = 0, cols = 2:ncol(res))
     return(res)
   }else if(what == "Return"){
     raw2[,RetDiff := abs(return_value - RealRet)]
-    res <- raw2[raw2[,.I[RetDiff == min(RetDiff)], by=SiteNo]$V1]
+    res <- raw2[raw2[,.I[RetDiff == min(RetDiff)], by=runid]$V1]
     res[,c("Return","RealRet","Sd","Sharpe","RetDiff") := NULL]
     setnafill(res, type = "const", fill = 0, cols = 2:ncol(res))
     return(res)
   }else if(what == "MaxSd"){
-    res <- raw2[raw2[,.I[Sd == max(Sd)], by=SiteNo]$V1]
+    res <- raw2[raw2[,.I[Sd == max(Sd)], by=runid]$V1]
     res[,c("Return","RealRet","Sd","Sharpe") := NULL]
     setnafill(res, type = "const", fill = 0, cols = 2:ncol(res))
     return(res)
   }else if(what == "MinSd"){
-    res <- raw2[raw2[,.I[Sd == min(Sd)], by=SiteNo]$V1]
+    res <- raw2[raw2[,.I[Sd == min(Sd)], by=runid]$V1]
     res[,c("Return","RealRet","Sd","Sharpe") := NULL]
     setnafill(res, type = "const", fill = 0, cols = 2:ncol(res))
     return(res)
