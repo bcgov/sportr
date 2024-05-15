@@ -51,7 +51,7 @@ feas <- fread("../CCISS_ShinyApp/data-raw/data_tables/Feasibility_v12_15.csv")
 sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
 #feas <- fread("D:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
 feas <- fread("F:\\OneDrive - Personal\\OneDrive\\WNA_BGC\\Feasibility_v12_15_DVM.csv")
-# sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
+sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
 
 #  sigma_feas2 <- make_covmat(feas, req_trees)
 sibec <-  ccissdev::SIBEC
@@ -59,7 +59,6 @@ sibec <-  ccissdev::SIBEC
 BGCmodel <- readRDS("../Build_WNA_BGC_model/WNA_BGCv12_10May24.rds")
 
 ```
-
 
 ```{r}
 
@@ -88,7 +87,6 @@ location <- data.table(lat =  53.8,	lon = -123.1, elev =	700, id = 1)
 # location <- data.table(lat =  54.62,	lon = -126.75, elev =	900, id = 1)
 
  eda <- "C4"
-
 ##mean loss parameters for feasibility (in percentages per year)
 feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" = c(95,85,60,40))
 #feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.1, 0.1, 0.1), "NoMort" = c(95,95, 95,95))
@@ -119,6 +117,7 @@ clim_dat[,run_id := interaction(id,GCM,SSP,RUN)]
 # # fwrite(clim_dat, "IDFdk3_site_climate.csv")
 # clim_dat <- fread("SBSdw3_site_climate.csv")
 ```
+
 ```{r}
 clim_hist <- clim_history %>% mutate(GCM = "Historic") %>% dplyr::select(id, GCM, PERIOD,DD5, all_of(vars))
 clim_fut <-  clim_dat %>% filter(!RUN == "ensembleMean") %>%
@@ -132,7 +131,7 @@ ggplot(climate, aes(x = PERIOD, y = CMD.total, group = GCM, colour= GCM)) +
 
 
 ```{r bgc predictions for portfolio by year}
-#clim_dat <- fread("IDFdk3_site_climate.csv")
+clim_dat <- fread("IDFdk3_site_climate.csv")
 clim_dat <- fread("SBSdw3_site_climate.csv")
 clim_dat <- fread("SBSmc2_site_climate.csv")
 clim_dat2 <- clim_dat %>% select(-DD5)
@@ -158,8 +157,9 @@ fwrite(temp, "normalperiod_predictedBGC.csv")
 tree_ls <- c("Fd", "Pl", "Sx", "Py", "Lw", "Hw", "Cw", "Pw", "Bl")#, "At")#"Bg","Hm",,   "Yc","Ac", ,  "At", "Ep")#, #, "Cw", "Hw", "Py", "Pw", "Lw", "At", "Ep", "Ac", "Bg")
 feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" = c(95,85,70,50))
 #feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.1, 0.1, 0.1), "NoMort" = c(95,95, 95,95))
+
 set.seed(1234)
-portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 7, feas, tree_ls, feas_prob, sigma = NULL)
+portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 7, feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
 xx <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
 plot(xx)
 port1.ratios <- port_ratios(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9) %>% adorn_totals()
@@ -256,7 +256,6 @@ lines(returns$At, type = "l")
 lines(returns$Lw, type = "l", col = "red")
 ```
 
-
 ```{r mean returns for all species}
 #| fig-cap: "Mean returns for all species in portfolio"
 #| out-width: "90%"
@@ -292,8 +291,6 @@ ggplot(portfolio1.sim) +
 
 ```
 
-
-
 ## Plot Efficient Frontier of Portfolio
 
 ```{r plotting an efficient frontier}
@@ -301,7 +298,6 @@ ggplot(portfolio1.sim) +
 # | out-width: "90%"
 plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
 ```
-
 
 ```{r plotting an efficient frontier2}
 # | fig-cap: "Modern Portfolio Theory Efficient Frontier Sigma from Feasibility"
@@ -341,14 +337,22 @@ tree.ratio.graph(portfolio1)
 tree.ratio.graph(portfolio2)
 
 ```
-Violin Plots
-This should show the variation in monte carlo simulation return for each portfolio risk choice plus a portfolio of the single best tree species
-```{r}
 
-
-```
+Violin Plots This should show the variation in monte carlo simulation return for each portfolio risk choice plus a portfolio of the single best tree species
 
 ```{r}
-
+dat <- melt(portfolio1$Return_Values)
+ggplot(dat, aes(x = variable, y = value)) +
+  geom_violin()
 ```
 
+### Violin Plots Based on Averaged Results
+
+.....in progress
+
+```{r}
+max_sharpe <- get_portfolio(portfolio_raw = portfolio1$Portfolio, what = "MaxSd")
+max_sharpe[,runid := NULL]
+ms <- colMeans(max_sharpe)
+ms
+```
