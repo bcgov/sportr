@@ -25,7 +25,7 @@ addVars <- function(dat) {
 }
 
 
-get_clim <- function(location, years = 2023:2099){
+get_clim <- function(location, years = 2015:2099){
   #vars_needed <- c("PPT05", "PPT06", "PPT07", "PPT08", "PPT09",
                   # "CMD", "PPT_at", "PPT_wt", "CMD07")
   #vars_needed <- c(vars_needed, vars) %>% unique
@@ -36,6 +36,31 @@ get_clim <- function(location, years = 2023:2099){
 
   return(clim_dat)
 }
+
+
+get_clim_periods <- function(location, periods = c("2021_2040", "2041_2060", "2061_2080", "2081_2100")){
+  #vars_needed <- c("PPT05", "PPT06", "PPT07", "PPT08", "PPT09",
+  # "CMD", "PPT_at", "PPT_wt", "CMD07")
+  #vars_needed <- c(vars_needed, vars) %>% unique
+  clim_dat <- climr_downscale(location, gcm_models = list_gcm(), gcm_period = periods, 
+                              ssp = "ssp245", max_run = 3L, return_normal = FALSE, vars = climr::list_variables())
+  addVars(clim_dat)
+  clim_dat <- clim_dat[!is.nan(CMD.total),]
+  
+  return(clim_dat)
+}
+
+get_clim_history <- function(location, years = c(1902:2015)){
+  #vars_needed <- c("PPT05", "PPT06", "PPT07", "PPT08", "PPT09",
+  # "CMD", "PPT_at", "PPT_wt", "CMD07")
+  #vars_needed <- c(vars_needed, vars) %>% unique
+  clim_dat <- climr_downscale(location, historic_ts = years, vars = climr::list_variables())
+  addVars(clim_dat)
+  clim_dat <- clim_dat[!is.nan(CMD.total),]
+  
+  return(clim_dat)
+}
+
 
 prep_data <- function(clim_dat, BGCmodel, suit_table, eda_table, eda = "C4"){
   xvars <- BGCmodel[["forest"]][["independent.variable.names"]]
@@ -173,7 +198,7 @@ get_portfolio <- function(portfolio_raw, run_list,
     stop("Unknown what. Please try again")
   }
 }
-portfolio = portfolio1$Portfolio; run_list = run_ls; current_unit = current_unit; returnValue = 0.9
+#portfolio = portfolio1$Portfolio; run_list = run_ls; current_unit = current_unit; returnValue = 0.9
 
 plot_ef <- function(portfolio, run_list, current_unit, returnValue = 0.9){
   portfolio <- portfolio[!is.infinite(value),]
