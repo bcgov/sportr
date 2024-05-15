@@ -42,9 +42,8 @@ source("pairwise_corr.R")
 ## Create covariance matrix
 
 ```{r input data}
-req_trees <- c("Ac", "At", "Bg", "Bl", "Cw", "Dr", "Ep", "Fd", 
- "Hm", "Hw", "Lw", "Mb", "Pa", "Pl", "Pw", "Py", "Sb", "Ss", 
- "Sx", "Yc")
+req_trees <- c("Ac", "At", "Ba", "Bg", "Bl", "Cw", "Dr", "Ep", "Fd", 
+ "Hm", "Hw", "Lw", "Pl", "Pw", "Py", "Sb", "Ss", "Sx", "Yc")
 
 
 feas <- fread("../CCISS_ShinyApp/data-raw/data_tables/Feasibility_v12_15.csv")
@@ -57,7 +56,7 @@ feas <- fread("F:\\OneDrive - Personal\\OneDrive\\WNA_BGC\\Feasibility_v12_15_DV
 #  sigma_feas2 <- make_covmat(feas, req_trees)
 sibec <-  ccissdev::SIBEC
 
-BGCmodel <- readRDS("../Common_Files/WNA_BGCv12_10May24.rds")
+BGCmodel <- readRDS("../Build_WNA_BGC_model/WNA_BGCv12_10May24.rds")
 
 ```
 
@@ -85,8 +84,8 @@ current_unit <- "SBSdw3/01" ##should lookup on map so this is automatic
 location <- data.table(lat =  53.8,	lon = -123.1, elev =	700, id = 1)
 # current_unit <- "IDFdk3/01"
 # location <- data.table(lat =  51.3,	lon = -121.4, elev =	1085, id = 1)
-current_unit <- "SBSmc2/01" ##should lookup on map so this is automatic
-location <- data.table(lat =  54.62,	lon = -126.75, elev =	900, id = 1)
+# current_unit <- "SBSmc2/01" ##should lookup on map so this is automatic
+# location <- data.table(lat =  54.62,	lon = -126.75, elev =	900, id = 1)
 
  eda <- "C4"
 
@@ -97,6 +96,7 @@ feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" =
 #change_prob <- data.table(FeasDiff = c(-3,-2,-1,0,1,2,3), PropLoss = c(0,0,0,0,1,1,1))
 
 tree_ls <- c("Fd","Pl","Sx","At","Bl","Cw","Hw","Py","Ep","Pw", "Lw", "Ac", "Bg") ##what species to include
+tre_ls = req_trees
 boundDat <- data.table(Spp = tree_ls) ##set bound on species - no bounds by default
 boundDat[,`:=`(minWt = 0, maxWt = 1)]
 
@@ -107,31 +107,58 @@ boundDat[,`:=`(minWt = 0, maxWt = 1)]
 ```{r get climate data}
 ##| cache: true
 clim_dat <- get_clim(location) ##yearly climate data
+clim_periods <- get_clim_periods(location)
+clim_history <- get_clim_history(location)
 BGCmodel <- readRDS("D:\\GitHub\\Build_WNA_BGC_model\\WNA_BGCv12_10May24.rds")
 vars.selected <- BGCmodel$variable.importance %>% as.data.frame() %>% rownames_to_column("var") %>% select(var)
 vars <- vars.selected$var
 clim_dat <- clim_dat %>% dplyr::select(id, GCM, SSP, RUN, PERIOD, DD5, all_of(vars))
-fwrite(clim_dat, "SBSmc2_site_climate.csv")
-# fwrite(clim_dat, "IDFdk3_site_climate.csv")
-clim_dat <- fread("SBSdw3_site_climate.csv")
+clim_dat[,run_id := interaction(id,GCM,SSP,RUN)]
+
+# fwrite(clim_dat, "SBSmc2_site_climate.csv")
+# # fwrite(clim_dat, "IDFdk3_site_climate.csv")
+# clim_dat <- fread("SBSdw3_site_climate.csv")
+```
+```{r}
+clim_hist <- clim_history %>% mutate(GCM = "Historic") %>% dplyr::select(id, GCM, PERIOD,DD5, all_of(vars))
+clim_fut <-  clim_dat %>% filter(!RUN == "ensembleMean") %>%
+  dplyr::select(id,  GCM, PERIOD, DD5, all_of(vars)) 
+climate <- rbind(clim_hist, clim_fut)
+climate[,PERIOD := as.numeric(PERIOD)]
+ggplot(climate, aes(x = PERIOD, y = CMD.total, group = GCM, colour= GCM)) +
+  geom_line()# +
+  #geom_text(aes(label = BGC), size = 4)
 ```
 
-```{r bgc predictions for portfolio}
+
+```{r bgc predictions for portfolio by year}
 #clim_dat <- fread("IDFdk3_site_climate.csv")
 clim_dat <- fread("SBSdw3_site_climate.csv")
 clim_dat <- fread("SBSmc2_site_climate.csv")
 clim_dat2 <- clim_dat %>% select(-DD5)
+eda = "D6"
 bgc_ss <- prep_data(clim_dat, BGCmodel, copy(feas), copy(E1), eda) ##bgc predictions
 clim_dat[,run_id := interaction(id,GCM,SSP,RUN)]
 temp <- unique(bgc_ss[,.(run_id,PERIOD,BGC)])
 ```
 
+```{r bgc predictions for portfolio by normal period}
+clim_normal <- clim_periods %>% dplyr::select(id, GCM, SSP, RUN, PERIOD, DD5, all_of(vars))
+bgc_ss <- prep_data(clim_normal, BGCmodel, copy(feas), copy(E1), eda) ##bgc predictions
+clim_normal[,run_id := interaction(id,GCM,SSP,RUN)]
+temp <- unique(bgc_ss[,.(run_id,PERIOD,BGC)])
+fwrite(temp, "normalperiod_predictedBGC.csv")
+```
+
+
+
 ## Run portfolios
 
 ```{r run portfolios}
-tree_ls <- c("Fd", "Pl", "Sx", "Py", "Lw", "Hw", "Cw", "Py")#,"Bl", "Cw", "Hw", "Py", "Pw", "Lw", "At", "Ep", "Ac", "Bg")
+tree_ls <- c("Fd", "Pl", "Sx", "Py", "Lw", "Hw", "Cw", "Pw", "Bl")#, "At")#"Bg","Hm",,   "Yc","Ac", ,  "At", "Ep")#, #, "Cw", "Hw", "Py", "Pw", "Lw", "At", "Ep", "Ac", "Bg")
 feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" = c(95,85,70,50))
 #feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.1, 0.1, 0.1), "NoMort" = c(95,95, 95,95))
+set.seed(1234)
 portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 7, feas, tree_ls, feas_prob, sigma = NULL)
 xx <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
 plot(xx)
@@ -160,16 +187,17 @@ port2.ratios <- port_ratios(portfolio = portfolio2$Portfolio, run_list = portfol
 #| out-width: "90%"
 #load("../Common_Files/BGCModel_Extratrees_Balanced.Rdata") ##load bgc model
 ##load bgc model
-clim_plot <- clim_dat[temp, on = c("run_id","PERIOD")]
+run = "r2i1p1f1"#"ensembleMean"
+clim_plot <- clim_dat %>% filter(GCM %in% "ACCESS-ESM1-5", RUN %in% run )
 xx <- unique(clim_dat$run_id) %>% as.data.frame
 #clim_plot <- clim_plot[run_id == "1.UKESM1-0-LL.ssp245.r1i1p1f2",]
 #models <- clim_plot$run_id %>% select(contains)
-clim_plot <- clim_plot[run_id == "1.ACCESS-ESM1-5.ssp245.r10i1p1f1",]
+#clim_plot <- clim_plot[run_id == "1.ACCESS-ESM1-5.ssp245.r10i1p1f1",]
 
-clim_plot[,PERIOD := as.numeric(PERIOD)]
-ggplot(clim_plot, aes(x = PERIOD, y = DD5_sp)) +
-  geom_line() +
-  geom_text(aes(label = BGC), size = 4)
+clim_dat[,PERIOD := as.numeric(PERIOD)]
+ggplot(clim_plot, aes(x = PERIOD, y = CMD.total, group = RUN, colour = RUN)) +
+  geom_line() # +
+ # geom_text(aes(label = BGC), size = 4)
 
 ggplot(clim_plot, aes(x = PERIOD, y = PPT_JAS)) +
   geom_line() +
