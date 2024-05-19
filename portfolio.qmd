@@ -321,8 +321,8 @@ ggplot(dat, aes(x = variable, y = value)) +
 .....in progress
 
 ```{r}
-max_sharpe <- get_portfolio(portfolio_raw = portfolio1$Portfolio, what = "MaxSd")
-max_sharpe[,runid := NULL]
-ms <- colMeans(max_sharpe)
+temp <- get_portfolio(portfolio_raw = portfolio1$Portfolio, what = "MaxSd")
+temp[,runid := NULL]
+maxsd <- colMeans(temp)
 ms
 ```
