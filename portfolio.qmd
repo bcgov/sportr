@@ -53,7 +53,7 @@ sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
 feas <- fread("F:\\OneDrive - Personal\\OneDrive\\WNA_BGC\\Feasibility_v12_15_DVM.csv")
 sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
 
-#  sigma_feas2 <- make_covmat(feas, req_trees)
+sigma_feas2 <- make_covmat(feas, req_trees)
 sibec <-  ccissdev::SIBEC
 
 BGCmodel <- readRDS("../Build_WNA_BGC_model/WNA_BGCv12_10May24.rds")
@@ -131,11 +131,11 @@ ggplot(climate, aes(x = PERIOD, y = CMD.total, group = GCM, colour= GCM)) +
 
 
 ```{r bgc predictions for portfolio by year}
-clim_dat <- fread("IDFdk3_site_climate.csv")
+#clim_dat <- fread("IDFdk3_site_climate.csv")
 clim_dat <- fread("SBSdw3_site_climate.csv")
-clim_dat <- fread("SBSmc2_site_climate.csv")
+#clim_dat <- fread("SBSmc2_site_climate.csv")
 clim_dat2 <- clim_dat %>% select(-DD5)
-eda = "D6"
+eda = "C4"
 bgc_ss <- prep_data(clim_dat, BGCmodel, copy(feas), copy(E1), eda) ##bgc predictions
 clim_dat[,run_id := interaction(id,GCM,SSP,RUN)]
 temp <- unique(bgc_ss[,.(run_id,PERIOD,BGC)])
@@ -159,11 +159,16 @@ feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" =
 #feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.1, 0.1, 0.1), "NoMort" = c(95,95, 95,95))
 
 set.seed(1234)
-portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 7, feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
+portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
 xx <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
 plot(xx)
 port1.ratios <- port_ratios(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9) %>% adorn_totals()
-gt(port1.ratios)
+
+portfolio2 <- run_portfolio(bgc_ss, sibec, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = sigma_feas)
+xx <- plot_ef(portfolio = portfolio2$Portfolio, run_list = portfolio2$run_list, current_unit = current_unit, returnValue = 0.9)
+plot(xx)
+port2.ratios <- port_ratios(portfolio = portfolio2$Portfolio, run_list = portfolio2$run_list, current_unit = current_unit, returnValue = 0.9) %>% adorn_totals()
+gt(port1.ratios, port2.ratios)
 # portfolio2 <- run_portfolio(bgc_ss, sibec, si_default = 12, feas, tree_ls, feas_prob, sigma = sigma_feas)
 # yy <- plot_ef(portfolio = portfolio2$Portfolio, run_list = portfolio2$run_list, current_unit = current_unit, returnValue = 0.9)
 # #currently not using this but likely will
