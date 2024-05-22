@@ -124,8 +124,7 @@ run_portfolio <- function(bgc_ss, SIBEC, si_default = 5, suit_table,
       temp <- data.table(Spp = tree, 
                          Year = 1:length(Returns), 
                          It = run, 
-                         Returns = Returns,
-                         run_num = run_nm)
+                         Returns = Returns)
       sim_ls[[count]] <- temp
       count <- count + 1
       if(tree == tree_ls[1]){
