@@ -107,7 +107,7 @@ boundDat[,`:=`(minWt = 0, maxWt = 1)]
 clim_dat <- get_clim(location) ##yearly climate data
 clim_periods <- get_clim_periods(location)
 clim_history <- get_clim_history(location)
-BGCmodel <- readRDS("D:\\GitHub\\Build_WNA_BGC_model\\WNA_BGCv12_10May24.rds")
+BGCmodel <- readRDS("../Common_Files/WNA_BGCv12_10May24.rds")
 vars.selected <- BGCmodel$variable.importance %>% as.data.frame() %>% rownames_to_column("var") %>% select(var)
 vars <- vars.selected$var
 clim_dat <- clim_dat %>% dplyr::select(id, GCM, SSP, RUN, PERIOD, DD5, all_of(vars))
@@ -115,7 +115,7 @@ clim_dat[,run_id := interaction(id,GCM,SSP,RUN)]
 
 # fwrite(clim_dat, "SBSmc2_site_climate.csv")
 # # fwrite(clim_dat, "IDFdk3_site_climate.csv")
-# clim_dat <- fread("SBSdw3_site_climate.csv")
+clim_dat <- fread("SBSdw3_site_climate.csv")
 ```
 
 ```{r}
@@ -212,6 +212,8 @@ ggplot(clim_plot, aes(x = PERIOD, y = CMD.total)) +
   geom_line() +
   geom_text(aes(label = BGC), size = 4)
 ```
+
+
 ```{r sibec_by_year}
 GCM_run = "1.ACCESS-ESM1-5.ssp245.r10i1p1f1"
 tree = "Cw"
@@ -356,8 +358,12 @@ ggplot(dat, aes(x = variable, y = value)) +
 .....in progress
 
 ```{r}
-max_sharpe <- get_portfolio(portfolio_raw = portfolio1$Portfolio, what = "MaxSd")
-max_sharpe[,runid := NULL]
-ms <- colMeans(max_sharpe)
-ms
+temp <- get_portfolio(portfolio_raw = portfolio1$Portfolio, what = "MaxSd")
+temp[,runid := NULL]
+maxsd <- colMeans(temp)
+maxsd
+
+sim_res <- portfolio1$Simulation
+sim_returns <- sim_res[Year == max(Year),]
+
 ```
