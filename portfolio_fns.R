@@ -119,6 +119,7 @@ run_portfolio <- function(bgc_ss, SIBEC, si_default = 5, suit_table,
       ss_sum[feas_prob, `:=`(Prop_Feas = i.PropLoss, NoMort = i.NoMort), on = "Feas"]
       ss_sum <- ss_sum[,.(SI = SI/50, Prop_Feas, FeasDiff, NoMort)]
       Returns <- simGrowthCpp(DF = ss_sum)
+      #Returns <- simGrowthCpp_new(DF = ss_sum)
       tmpR <- c(0,Returns)
       assets <- Returns - tmpR[-length(tmpR)]
       temp <- data.table(Spp = tree, 
