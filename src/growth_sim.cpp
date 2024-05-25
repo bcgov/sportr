@@ -135,3 +135,40 @@ NumericVector simGrowthCpp(DataFrame DF){
   }
   return(Returns);
 }
+
+// [[Rcpp::export]]
+NumericVector simGrowthCpp_new(DataFrame DF){
+  int nTrees = 100;
+  NumericVector Growth = DF["SI"]; //convert to vectors
+  NumericVector ProbEvent  = DF["ProbEvent"];
+  NumericVector ProbLoss = DF["ProbLoss"];
+  NumericVector Feas = DF["Feas"];
+  NumericVector Ruin = DF["FeasDiff"];//think about this one
+  
+  int numYears = Growth.length();
+  NumericVector Returns(numYears);
+  double height, percentDead;
+  int prevTrees, numDead, i;
+  for(i = 0; i < numYears; i++){
+    height = sum(Growth[Rcpp::Range(0,i)]);
+    Returns[i] = nTrees*height;
+    if(Rcpp::runif(1,0,100)[0] > ProbEvent[i]){//regular environmental loss
+      prevTrees = nTrees;
+      percentDead = ifelse(Feas <1.5, percentDead = Rcpp::rgamma(2, 3, ProbLoss[i])[0],
+             ifelse(Feas <2.5, percentDead = Rcpp::rgamma(2, 2, ProbLoss[i])[0],
+             ifelse(Feas < 3.5,percentDead = Rcpp::rgamma(2, 1, ProbLoss[i])[0],
+                    percentDead = Rcpp::rgamma(2, 0.5, ProbLoss[i])[0])));
+
+      //Rcout << "Percent Dead:" << percentDead << "\n";
+      numDead = (percentDead/100)*prevTrees;
+      nTrees = prevTrees - numDead;
+    }
+    // if(Ruin[i] >= 3){
+    //   prevTrees = nTrees;
+    //   percentDead = Rcpp::rgamma(1, 1.5, 25)[0];
+    //   numDead = (percentDead/100)*prevTrees;
+    //   nTrees = nTrees - numDead;
+    // }
+  }
+  return(Returns);
+}
