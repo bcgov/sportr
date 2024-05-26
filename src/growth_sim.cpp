@@ -16,7 +16,7 @@ NumericVector gs2gw(NumericVector x, double a, double b){
 NumericVector SimGrowth_Climate(DataFrame DF, double cmdMin, 
                         double cmdMax, double tempMin, double tempMax, double climLoss){
   NumericVector Growth = DF["Growth"]; //convert to vectors
-  NumericVector NoMort  = DF["NoMort"];
+  NumericVector ProbEvent  = DF["ProbEvent"];
   NumericVector MeanDead = DF["MeanDead"];
   NumericVector Ruin = DF["Suit"];//think about this one
   NumericVector climCMD = DF["CMD"];
@@ -64,7 +64,7 @@ NumericVector SimGrowth_Climate(DataFrame DF, double cmdMin,
       climDead = nTrees;
     }
     nTrees = nTrees - climDead;
-    if(Rcpp::runif(1,0,100)[0] > NoMort[i]){//regular environmental loss
+    if(Rcpp::runif(1,0,100)[0] > ProbEvent[i]){//regular environmental loss
       percentDead = Rcpp::rgamma(1, 2, MeanDead[i])[0];
       numDead = (percentDead/100)*prevTrees;
       nTrees = nTrees - numDead;
@@ -76,7 +76,7 @@ NumericVector SimGrowth_Climate(DataFrame DF, double cmdMin,
 // [[Rcpp::export]]
 NumericVector SimGrowth_Regular(DataFrame DF){
   NumericVector Growth = DF["SI"]; //convert to vectors
-  NumericVector NoMort  = DF["NoMort"];
+  NumericVector ProbEvent  = DF["ProbEvent"];
   NumericVector MeanDead = DF["Prop_Feas"];
   NumericVector Ruin = DF["FeasDiff"];//think about this one
   
@@ -89,7 +89,7 @@ NumericVector SimGrowth_Regular(DataFrame DF){
     height = sum(Growth[Rcpp::Range(0,i)]);
     Returns[i] = nTrees*height;
     
-    if(Rcpp::runif(1,0,100)[0] > NoMort[i]){//regular environmental loss
+    if(Rcpp::runif(1,0,100)[0] > ProbEvent[i]){//regular environmental loss
       Rcout << "Killing trees \n";
       percentDead = Rcpp::rgamma(1, 2, MeanDead[i])[0];
       numDead = (percentDead/100)*prevTrees;
@@ -108,20 +108,24 @@ NumericVector SimGrowth_Regular(DataFrame DF){
 NumericVector simGrowthCpp(DataFrame DF){
   int nTrees = 100;
   NumericVector Growth = DF["SI"]; //convert to vectors
-  NumericVector NoMort  = DF["NoMort"];
-  NumericVector MeanDead = DF["Prop_Feas"];
+  NumericVector ProbEvent  = DF["ProbEvent"];
+// NumericVector ProbLoss = DF["ProbLoss"];
+  NumericVector gamma_shp = DF["gamma_shp"];
+  NumericVector gamma_rate = DF["gamma_rate"];
   NumericVector Ruin = DF["FeasDiff"];//think about this one
   
   int numYears = Growth.length();
   NumericVector Returns(numYears);
+  //NumericVector Livetrees(numYears);
   double height, percentDead;
   int prevTrees, numDead, i;
   for(i = 0; i < numYears; i++){
     height = sum(Growth[Rcpp::Range(0,i)]);
     Returns[i] = nTrees*height;
-    if(Rcpp::runif(1,0,100)[0] > NoMort[i]){//regular environmental loss
+    //Livetrees[i] = nTrees;
+    if(Rcpp::runif(1,0,100)[0] > ProbEvent[i]){//regular environmental loss
       prevTrees = nTrees;
-      percentDead = Rcpp::rgamma(1, 1.5, MeanDead[i])[0];
+      percentDead = Rcpp::rgamma(1, gamma_shp[i], gamma_rate[i])[0];
       //Rcout << "Percent Dead:" << percentDead << "\n";
       numDead = (percentDead/100)*prevTrees;
       nTrees = prevTrees - numDead;
@@ -133,32 +137,31 @@ NumericVector simGrowthCpp(DataFrame DF){
     //   nTrees = nTrees - numDead;
     // }
   }
-  return(Returns);
+ return(Returns);
 }
 
 // [[Rcpp::export]]
-NumericVector simGrowthCpp_new(DataFrame DF){
+NumericVector simTreesCpp(DataFrame DF){
   int nTrees = 100;
   NumericVector Growth = DF["SI"]; //convert to vectors
   NumericVector ProbEvent  = DF["ProbEvent"];
-  NumericVector ProbLoss = DF["ProbLoss"];
-  NumericVector Feas = DF["Feas"];
+  // NumericVector ProbLoss = DF["ProbLoss"];
+  NumericVector gamma_shp = DF["gamma_shp"];
+  NumericVector gamma_rate = DF["gamma_rate"];
   NumericVector Ruin = DF["FeasDiff"];//think about this one
   
   int numYears = Growth.length();
-  NumericVector Returns(numYears);
+  //NumericVector Returns(numYears);
+  NumericVector Livetrees(numYears);
   double height, percentDead;
   int prevTrees, numDead, i;
   for(i = 0; i < numYears; i++){
     height = sum(Growth[Rcpp::Range(0,i)]);
-    Returns[i] = nTrees*height;
+   //Returns[i] = nTrees*height;
+    Livetrees[i] = nTrees;
     if(Rcpp::runif(1,0,100)[0] > ProbEvent[i]){//regular environmental loss
       prevTrees = nTrees;
-      percentDead = ifelse(Feas <1.5, percentDead = Rcpp::rgamma(2, 3, ProbLoss[i])[0],
-             ifelse(Feas <2.5, percentDead = Rcpp::rgamma(2, 2, ProbLoss[i])[0],
-             ifelse(Feas < 3.5,percentDead = Rcpp::rgamma(2, 1, ProbLoss[i])[0],
-                    percentDead = Rcpp::rgamma(2, 0.5, ProbLoss[i])[0])));
-
+      percentDead = Rcpp::rgamma(1, gamma_shp[i], gamma_rate[i])[0];
       //Rcout << "Percent Dead:" << percentDead << "\n";
       numDead = (percentDead/100)*prevTrees;
       nTrees = prevTrees - numDead;
@@ -170,5 +173,5 @@ NumericVector simGrowthCpp_new(DataFrame DF){
     //   nTrees = nTrees - numDead;
     // }
   }
-  return(Returns);
+  return(Livetrees);
 }
