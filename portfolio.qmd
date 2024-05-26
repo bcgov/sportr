@@ -31,6 +31,7 @@ library(RColorBrewer)
 require(labdsv)
 require(tidyverse)
 require(gt)
+require(ggpubr)
 require(janitor)
 source("optimisation.R")
 source("portfolio_fns.R")
@@ -85,12 +86,12 @@ current_unit <- "SBSdw3/01" ##should lookup on map so this is automatic
 location <- data.table(lat =  53.8,	lon = -123.1, elev =	700, id = 1)
 # current_unit <- "IDFdk3/01"
 # location <- data.table(lat =  51.3,	lon = -121.4, elev =	1085, id = 1)
-current_unit <- "SBSmc2/01" ##should lookup on map so this is automatic
-location <- data.table(lat =  54.62,	lon = -126.75, elev =	900, id = 1)
+# current_unit <- "SBSmc2/01" ##should lookup on map so this is automatic
+# location <- data.table(lat =  54.62,	lon = -126.75, elev =	900, id = 1)
 
  eda <- "C4"
 ##mean loss parameters for feasibility (in percentages per year)
-feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" = c(95,85,60,40))
+#feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" = c(95,85,60,40))
 #feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.1, 0.1, 0.1), "NoMort" = c(95,95, 95,95))
 ##currently not using this but likely will
 #change_prob <- data.table(FeasDiff = c(-3,-2,-1,0,1,2,3), PropLoss = c(0,0,0,0,1,1,1))
@@ -109,6 +110,7 @@ boundDat[,`:=`(minWt = 0, maxWt = 1)]
 clim_dat <- get_clim(location) ##yearly climate data
 clim_periods <- get_clim_periods(location)
 clim_history <- get_clim_history(location)
+#clim_normal <- get_clim_normal(location)
 #BGCmodel <- readRDS("../Common_Files/WNA_BGCv12_10May24.rds")
 BGCmodel <- readRDS("../Build_WNA_BGC_model/WNA_BGCv12_10May24.rds")
 vars.selected <- BGCmodel$variable.importance %>% as.data.frame() %>% rownames_to_column("var") %>% select(var)
@@ -142,6 +144,12 @@ ggplot(climate, aes(x = PERIOD, y = DD5, group = GCM, colour= GCM)) +
   facet_wrap(~GCM)
 ```
 
+```{r SIBEC by DD% and CMD.total}
+SI.climate <- rbind(clim_hist, clim_fut) %>% select(GCM, PERIOD, DD5, CMD.total) %>% mutate(SI.Fd = )
+
+```
+
+
 ```{r probability distibutions of mortality events}
 datag1 <- qgamma(.5, shape=1, rate=3)
 datag2 <- qgamma(.5, shape=2, rate=2)
@@ -152,25 +160,35 @@ med2 <- quantile(datag2, 0.5)
 med3 <- quantile(datag3, 0.5) 
 med4 <- quantile(datag4, 0.5)
 #vline <- tibble(feas = c("high", "moderate", "low", "not"), lines = c(med1, med2, med3, med4))
-
+library(ggplot2)
+colours <- c(high = "green", "moderate" = "blue", "low" = "orange", "poor" = "grey")
+high = "green"
 ggplot(data = data.frame(x = c(0, 10)), aes(x = x)) +
         #stat_function(fun = dnorm, args = list(mean = 5, sd = sqrt(8)), color = "red") +
-        stat_function(fun = \(x) dgamma(x, shape = 2, rate = 3), colour = 'green')+
-          stat_function(fun = \(x) dgamma(x, shape = 2, rate = 2), colour = 'blue')+
-          stat_function(fun = \(x) dgamma(x, shape = 2, rate = 1), colour = 'orange')+
-          stat_function(fun = \(x) dgamma(x, shape = 2, rate = .5), colour = 'grey')+
+        stat_function(fun = \(x) dgamma(x, shape = 2, rate = 3), color = "green", size = 1)+
+          stat_function(fun = \(x) dgamma(x, shape = 2, rate = 2), colour = 'blue', size = 1)+
+          stat_function(fun = \(x) dgamma(x, shape = 2, rate = 1), colour = 'orange', size = 1)+
+          stat_function(fun = \(x) dgamma(x, shape = 2, rate = .5), colour = 'grey', size = 1)+
   theme_clean()+
-  xlab("proportion of trees dying in event")+ ylab("probability")+
-  geom_vline(xintercept = med1, colour = 'green')+
-  geom_vline(xintercept = med2)+
-  geom_vline(xintercept = med3)+
-  geom_vline(xintercept = med4)
+   labs(x = "proportion of trees dying in event",
+        y= "probability",
+        colours = "Legend")#+
+  #   scale_color_manual(values = colour)
+  
+  # geom_vline(xintercept = med1, colour = 'green')+
+  # geom_vline(xintercept = med2)+
+  # geom_vline(xintercept = med3)+
+  # geom_vline(xintercept = med4)
+
+ggplot(data = data.frame(x = c(0, 10)), aes(x = x)) +
+        stat_function(fun = dnorm, args = list(mean = 5, sd = sqrt(8)), color = "red")
+
 ```
 
 
 ```{r bgc predictions for portfolio by year}
 #clim_dat <- fread("IDFdk3_site_climate.csv")
-clim_dat <- fread("SBSmc2_site_climate.csv")
+#clim_dat <- fread("SBSmc2_site_climate.csv")
 #clim_dat <- fread("SBSmc2_site_climate.csv")
 clim_dat2 <- clim_dat %>% select(-DD5)
 eda = "C4"
@@ -191,47 +209,67 @@ fwrite(temp, "normalperiod_predictedBGC.csv")
 
 ```{r run portfolios}
 tree_ls <- c("Fd", "Pl", "Sx", "Py", "Lw", "Hw", "Cw", "Pw", "Bl")#, "At")#"Bg","Hm",,   "Yc","Ac", ,  "At", "Ep")#, #, "Cw", "Hw", "Py", "Pw", "Lw", "At", "Ep", "Ac", "Bg")
-feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" = c(95,85,70,50))
-#feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.1, 0.1, 0.1), "NoMort" = c(95,95, 95,95))
 ### different sibec numbers
+
+feas_prob = data.table(Feas = c(1,2,3,4), gamma_shp = c(2,2,2,2) , gamma_rate = c(.5, 1, 2, 3), ProbEvent = c(95,95,95,95)) #gamma_rate = c(3, 2, 1, .5),
+
 set.seed(1234)
-portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
+portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 7, suit_table = feas, tree_ls = tree_ls, feas_prob = feas_prob, n_sim = 10, sigma = sigma_feas)
+
 xx1 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
+plot(xx1)
+
+port1.ratios <- port_ratios(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9) %>% rename("90% Max_Return" = Set_Return)
+gt(port1.ratios)
+```
+
+```{r}
+survival <- portfolio1$Simulation %>% filter(Year == 85) %>% group_by(runid, Spp, It) %>%   slice_min(Livetrees)
+portfolio <- portfolio1$Portfolio %>% select(-SiteNo, -Spp) %>% group_by(runid, Return) %>% mutate(prop = sum(value))
+dat <- melt(portfolio1$Return_Values)
+ggplot(dat, aes(x = variable, y = value)) +
+  geom_violin()+
+  theme_few()
+```
+
+```{r portfolios set to different settings}
+
+set.seed(1234)
+# portfolio2 <- run_portfolio(bgc_ss, sibec_even, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
+# xx2 <- plot_ef(portfolio = portfolio2$Portfolio, run_list = portfolio2$run_list, current_unit = current_unit, returnValue = 0.9)
+# #plot(xx)
+# set.seed(1234)
+# portfolio3 <- run_portfolio(bgc_ss, sibec_general, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
+# xx3 <- plot_ef(portfolio = portfolio3$Portfolio, run_list = portfolio3$run_list, current_unit = current_unit, returnValue = 0.9)
+# 
+# ggarrange(xx1, xx2, xx3)
+
+portfolio4 <- run_portfolio(bgc_ss, sibec, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = sigma_feas)
+xx4 <- plot_ef(portfolio = portfolio4$Portfolio, run_list = portfolio4$run_list, current_unit = current_unit, returnValue = 0.9)
+plot(xx4)
+
+set.seed(1234)
+portfolio5 <- run_portfolio(bgc_ss, sibec_even, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = sigma_feas)
+xx5 <- plot_ef(portfolio = portfolio5$Portfolio, run_list = portfolio5$run_list, current_unit = current_unit, returnValue = 0.9)
 #plot(xx)
-
 set.seed(1234)
-portfolio1 <- run_portfolio(bgc_ss, sibec_even, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
-xx2 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
-#plot(xx)
-set.seed(1234)
-portfolio1 <- run_portfolio(bgc_ss, sibec_general, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
-xx3 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
+portfolio6 <- run_portfolio(bgc_ss, sibec_general, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = sigma_feas)
+xx6 <- plot_ef(portfolio = portfolio6$Portfolio, run_list = portfolio6$run_list, current_unit = current_unit, returnValue = 0.9)
+
+ggarrange(xx4, xx5, xx6)
 
 
-portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = sigma_feas)
-xx4 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
-#plot(xx)
-
-set.seed(1234)
-portfolio1 <- run_portfolio(bgc_ss, sibec_even, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = sigma_feas)
-xx5 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
-#plot(xx)
-set.seed(1234)
-portfolio1 <- run_portfolio(bgc_ss, sibec_general, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = sigma_feas)
-xx6 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
-
-
-feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.1, 0.1, 0.1), "NoMort" = c(95,95, 95,95))
-
-portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
-xx7 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
-
-set.seed(1234)
-portfolio1 <- run_portfolio(bgc_ss, sibec_even, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
-xx8 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
-
-set.seed(1234)
-portfolio1 <- run_portfolio(bgc_ss, sibec_general, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
+#feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.1, 0.1, 0.1), "NoMort" = c(95,95, 95,95))
+# 
+# portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
+# xx7 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
+# 
+# set.seed(1234)
+# portfolio1 <- run_portfolio(bgc_ss, sibec_even, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
+# xx8 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
+# 
+# set.seed(1234)
+# portfolio1 <- run_portfolio(bgc_ss, sibec_general, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
 xx9 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
 
 portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = sigma_feas)
@@ -246,18 +284,18 @@ set.seed(1234)
 portfolio1 <- run_portfolio(bgc_ss, sibec_general, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = sigma_feas)
 xx12 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
 
-feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,2, 5, 10), "NoMort" = c(95,75, 50,25))
+#feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,2, 5, 10), "NoMort" = c(95,75, 50,25))
 
-portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
-xx13 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
-
-set.seed(1234)
-portfolio1 <- run_portfolio(bgc_ss, sibec_even, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
-xx14 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
-
-set.seed(1234)
-portfolio1 <- run_portfolio(bgc_ss, sibec_general, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
-xx15 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
+# portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
+# xx13 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
+# 
+# set.seed(1234)
+# portfolio1 <- run_portfolio(bgc_ss, sibec_even, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
+# xx14 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
+# 
+# set.seed(1234)
+# portfolio1 <- run_portfolio(bgc_ss, sibec_general, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = NULL)
+# xx15 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
 
 portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 7, suit_table = feas, tree_ls, feas_prob, n_sim = 10, sigma = sigma_feas)
 xx16 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
@@ -349,19 +387,26 @@ ggplot(clim_plot, aes(x = PERIOD, y = CMD.total)) +
   geom_text(aes(label = BGC), size = 4)
 ```
 
-```{r sibec_by_year}
+```{r looks at sibec_by_year}
 GCM_run = "1.ACCESS-ESM1-5.ssp245.r10i1p1f1"
-tree = "Cw"
-sibec <- sibec %>% mutate_if(is.numeric, round, 1)
-current_sibec <- sibec %>% filter(SS_NoSpace == current_unit, TreeSpp %in% tree) %>%  mutate(SI = MeanPlotSiteIndex)
+tree = c("Sx", "Pl", "Fd", "Lw")
+sibec <- sibec %>% mutate_if(is.numeric, round, 1) %>%  mutate(SI = MeanPlotSiteIndex)
+#current_sibec <- sibec %>% filter(SS_NoSpace == current_unit, TreeSpp %in% tree) 
 
- xx <- sibec_by_year(bgc_ss, SIBEC = sibec, si_default = 15, feas, tree_ls, GCM_run = "1.ACCESS-ESM1-5.ssp245.r10i1p1f1") %>% filter(Spp %in% tree)
+ xx <- sibec_by_year(bgc_ss, SIBEC = sibec, si_default = 15, feas, tree_ls, GCM_run = "1.ACCESS-ESM1-5.ssp245.r10i1p1f1") %>% filter(Spp %in% tree) %>% mutate(MAI = Returns.SI/50)
 
-ggplot(xx, aes(x = Returns.PERIOD, y = Returns.SI, fill = Spp)) +
+ corr.xx <- xx %>% select(Spp, Returns.PERIOD, MAI) %>% as.data.frame %>% 
+    #mutate(rn = rowid(Spp)) %>%
+    pivot_wider(names_from = Spp, values_from = MAI) %>%  
+    column_to_rownames("Returns.PERIOD") %>% 
+   as.matrix %>%   cor
+ggplot(xx, aes(x = Returns.PERIOD, y = MAI, group = Spp,color = Spp)) +
   geom_line() +
-  geom_text(aes(label = Returns.SI), size = 4) +
-  geom_hline(yintercept = current_sibec$SI)+
-  facet_wrap(~Spp, ncol = 2)
+  #geom_text(aes(label = MAI), size = 3) +
+  #geom_hline(yintercept = current_sibec$SI)+
+  #facet_wrap(~Spp, ncol = 2)+
+  #ylim(0,30)+
+  theme_clean()
 
 ggplot(xx, aes(x = Returns.PERIOD, y = Returns.Feas, fill = Spp)) +
   geom_line() +
