@@ -38,7 +38,7 @@ get_clim <- function(location, years = 2015:2099){
 }
 
 
-get_clim_periods <- function(location, periods = c("2021_2040", "2041_2060", "2061_2080", "2081_2100")){
+get_clim_periods <- function(location, periods = c( "2001_2020", "2021_2040", "2041_2060", "2061_2080", "2081_2100")){
   #vars_needed <- c("PPT05", "PPT06", "PPT07", "PPT08", "PPT09",
   # "CMD", "PPT_at", "PPT_wt", "CMD07")
   #vars_needed <- c(vars_needed, vars) %>% unique
@@ -61,6 +61,16 @@ get_clim_history <- function(location, years = c(1902:2015)){
   return(clim_dat)
 }
 
+get_clim_normal <- function(location, period = c("1961_1990")){
+  #vars_needed <- c("PPT05", "PPT06", "PPT07", "PPT08", "PPT09",
+  # "CMD", "PPT_at", "PPT_wt", "CMD07")
+  #vars_needed <- c(vars_needed, vars) %>% unique
+  clim_dat <- climr_downscale(location, historic = period, vars = climr::list_variables())
+  addVars(clim_dat)
+  clim_dat <- clim_dat[!is.nan(CMD.total),]
+  
+  return(clim_dat)
+}
 
 prep_data <- function(clim_dat, BGCmodel, suit_table, eda_table, eda = "C4"){
   xvars <- BGCmodel[["forest"]][["independent.variable.names"]]
@@ -86,67 +96,131 @@ prep_data <- function(clim_dat, BGCmodel, suit_table, eda_table, eda = "C4"){
 # tree = "Sx"  
 # run="1.ACCESS-ESM1-5.ssp245.r10i1p1f1"
 # suit_table = feas
-run_portfolio <- function(bgc_ss, SIBEC, si_default = 5, suit_table, 
-                          tree_ls, feas_prob, n_sim = 10, sigma = NULL){
-  sim_ls <- list()
-  portfolio_ls <- list()
-  return_ls <- list()
-  count <- 1
-  run_ls <- unique(bgc_ss$run_id)
-  run_sim <- rep(1:length(run_ls), n_sim)
-  run_count <- 1
-  run_ls <- rep(run_ls, each = n_sim)
-  for(run in run_ls){
-    run_nm <- paste0(run,run_sim[run_count])
-    ss_run_orig <- bgc_ss[run_id == run,]
-    setorder(ss_run_orig, PERIOD)
-    cat(".")
+# run_portfolio <- function(bgc_ss, SIBEC, si_default = 5, suit_table, 
+#                           tree_ls, feas_prob, n_sim = 10, sigma = NULL){
+#   sim_ls <- list()
+#   portfolio_ls <- list()
+#   return_ls <- list()
+#   count <- 1
+#   run_ls <- unique(bgc_ss$run_id)
+#   run_sim <- rep(1:length(run_ls), n_sim)
+#   run_count <- 1
+#   run_ls <- rep(run_ls, each = n_sim)
+#   for(run in run_ls){
+#     run_nm <- paste0(run,run_sim[run_count])
+#     ss_run_orig <- bgc_ss[run_id == run,]
+#     setorder(ss_run_orig, PERIOD)
+#     cat(".")
+# 
+#     for(tree in tree_ls){
+#       si_spp <- SIBEC[TreeSpp == tree,]
+#       suit_spp <- suit_table[spp == tree,]
+#       ss_run <- copy(ss_run_orig)
+#       ss_run[si_spp, SI := i.MeanPlotSiteIndex, on = "SS_NoSpace"]
+#       #setnafill(ss_run, type = "locf",cols = "SI")
+#       setnafill(ss_run, type = "const", fill = si_default, cols = "SI")
+#       ss_run[suit_spp, Feas := i.newfeas, on = c(SS_NoSpace = "ss_nospace")]
+#       setnafill(ss_run, type = "const", fill = 4, cols = "Feas")
+#       ss_run[is.na(ss_run)] <- "unknown"
+#       ss_sum <- ss_run[,.(SI = mean(SI), Feas = round(mean(Feas))), by = .(PERIOD)]
+#       ss_sum[,FeasRoll := frollmean(Feas, n = 3)]
+#       ss_sum[,FeasDiff := c(NA,diff(Feas))]
+#       #ss_sum <- ss_sum[-c(1:3),]
+#       ss_sum[feas_prob, `:=`(Prop_Feas = i.PropLoss, NoMort = i.NoMort), on = "Feas"]
+#       ss_sum <- ss_sum[,.(SI = SI/50, Prop_Feas, FeasDiff, NoMort)]
+#       Returns <- simGrowthCpp(DF = ss_sum)
+#       #Returns <- simGrowthCpp_new(DF = ss_sum)
+#       tmpR <- c(0,Returns)
+#       assets <- Returns - tmpR[-length(tmpR)]
+#       temp <- data.table(Spp = tree, 
+#                          Year = 1:length(Returns), 
+#                          It = run, 
+#                          Returns = Returns,
+#                         run_nm = run_nm)
+#       sim_ls[[count]] <- temp
+#       count <- count + 1
+#       if(tree == tree_ls[1]){
+#         tree_ass <- data.table(Year = 1:length(assets))
+#       }
+#       set(tree_ass, j = tree, value = assets)
+#     }
+#     returns <- tree_ass
+#     returns[,Year := NULL]
+#     ###only include species with mean return > 1 in portfolio
+#     use <- colnames(returns)[colMeans(returns) > stats::quantile(colMeans(returns),0.1)] ###removes species with very low returns should probably be higher
+#     if(length(use) > 1){
+#       returns <- returns[,..use]
+#       #print(use)
+#       if(is.null(sigma)){
+#         sigma2 <- cor(returns) ###to create cov mat from returns
+#       }else{
+#         sigma2 <- sigma[use,use]
+#       }
 
-    for(tree in tree_ls){
-      si_spp <- SIBEC[TreeSpp == tree,]
-      suit_spp <- suit_table[spp == tree,]
-      ss_run <- copy(ss_run_orig)
-      ss_run[si_spp, SI := i.MeanPlotSiteIndex, on = "SS_NoSpace"]
-      #setnafill(ss_run, type = "locf",cols = "SI")
-      setnafill(ss_run, type = "const", fill = si_default, cols = "SI")
-      ss_run[suit_spp, Feas := i.newfeas, on = c(SS_NoSpace = "ss_nospace")]
-      setnafill(ss_run, type = "const", fill = 4, cols = "Feas")
-      ss_run[is.na(ss_run)] <- "unknown"
-      ss_sum <- ss_run[,.(SI = mean(SI), Feas = round(mean(Feas))), by = .(PERIOD)]
-      ss_sum[,FeasRoll := frollmean(Feas, n = 3)]
-      ss_sum[,FeasDiff := c(NA,diff(Feas))]
-      #ss_sum <- ss_sum[-c(1:3),]
-      ss_sum[feas_prob, `:=`(Prop_Feas = i.PropLoss, NoMort = i.NoMort), on = "Feas"]
-      ss_sum <- ss_sum[,.(SI = SI/50, Prop_Feas, FeasDiff, NoMort)]
-      Returns <- simGrowthCpp(DF = ss_sum)
-      #Returns <- simGrowthCpp_new(DF = ss_sum)
-      tmpR <- c(0,Returns)
-      assets <- Returns - tmpR[-length(tmpR)]
-      temp <- data.table(Spp = tree, 
-                         Year = 1:length(Returns), 
-                         It = run, 
-                         Returns = Returns,
-                        run_nm = run_nm)
-      sim_ls[[count]] <- temp
-      count <- count + 1
-      if(tree == tree_ls[1]){
-        tree_ass <- data.table(Year = 1:length(assets))
-      }
-      set(tree_ass, j = tree, value = assets)
-    }
-    returns <- tree_ass
-    returns[,Year := NULL]
-    ###only include species with mean return > 1 in portfolio
-    use <- colnames(returns)[colMeans(returns) > stats::quantile(colMeans(returns),0.1)] ###removes species with very low returns should probably be higher
-    if(length(use) > 1){
-      returns <- returns[,..use]
-      #print(use)
-      if(is.null(sigma)){
-        sigma2 <- cor(returns) ###to create cov mat from returns
-      }else{
-        sigma2 <- sigma[use,use]
-      }
-      
+   #run_sim = 1   
+ run_portfolio <- function(bgc_ss, SIBEC, si_default = 7, suit_table, tree_ls, 
+        feas_prob = data.table(Feas = c(1,2,3,4), gamma_shp = c(2,2,2,2), gamma_rate = c(3,2,1,0.5), ProbEvent = c(95,95,95,95)), 
+        n_sim = 10, sigma = NULL){
+        sim_ls <- list()
+        portfolio_ls <- list()
+        return_ls <- list()
+        count <- 1
+        run_ls <- unique(bgc_ss$run_id)
+        run_sim <- rep(1:length(run_ls), n_sim)
+        run_count <- 1
+        run_ls <- rep(run_ls, each = n_sim)
+        for(run in run_ls){
+          run_nm <- paste0(run,run_sim[run_count])
+          ss_run_orig <- bgc_ss[run_id == run,]
+          setorder(ss_run_orig, PERIOD)
+          cat(".")
+          
+          for(tree in tree_ls){
+            si_spp <- SIBEC[TreeSpp == tree,]
+            suit_spp <- suit_table[spp == tree,]
+            ss_run <- copy(ss_run_orig)
+            ss_run[si_spp, SI := i.MeanPlotSiteIndex, on = "SS_NoSpace"]
+            #setnafill(ss_run, type = "locf",cols = "SI")
+            setnafill(ss_run, type = "const", fill = si_default, cols = "SI")
+            ss_run[suit_spp, Feas := i.newfeas, on = c(SS_NoSpace = "ss_nospace")]
+            setnafill(ss_run, type = "const", fill = 4, cols = "Feas")
+            ss_run[is.na(ss_run)] <- "unknown"
+            ss_sum <- ss_run[,.(SI = mean(SI), Feas = round(mean(Feas))), by = .(PERIOD)]
+            ss_sum[,FeasRoll := frollmean(Feas, n = 3)]
+            ss_sum[,FeasDiff := c(NA,diff(Feas))]
+            #ss_sum <- ss_sum[-c(1:3),]
+            ss_sum[feas_prob, `:=`(gamma_rate = i.gamma_rate, gamma_shp = i.gamma_shp, ProbEvent = i.ProbEvent), on = "Feas"]
+            ss_sum <- ss_sum[,.(SI = SI/50,  gamma_shp, gamma_rate, FeasDiff, ProbEvent)]
+            Returns <- simGrowthCpp(DF = ss_sum)
+            Livetrees <- simTreesCpp(DF = ss_sum)
+            tmpR <- c(0,Returns)
+            assets <- Returns - tmpR[-length(tmpR)]
+            temp <- data.table(Spp = tree, 
+                               Year = 1:length(Returns), 
+                               It = run, 
+                               Returns = Returns,
+                               Livetrees=Livetrees,
+                               run_nm = run_nm)
+            sim_ls[[count]] <- temp
+            count <- count + 1
+            if(tree == tree_ls[1]){
+              tree_ass <- data.table(Year = 1:length(assets))
+            }
+            set(tree_ass, j = tree, value = assets)
+          }
+          returns <- tree_ass
+          returns[,Year := NULL]
+          ###only include species with mean return > 1 in portfolio
+          use <- colnames(returns)[colMeans(returns) > stats::quantile(colMeans(returns),0.1)] ###removes species with very low returns should probably be higher
+          if(length(use) > 1){
+            returns <- returns[,..use]
+            #print(use)
+            if(is.null(sigma)){
+              sigma2 <- cor(returns) ###to create cov mat from returns
+            }else{
+              sigma2 <- sigma[use,use]
+            }      
+           
       #print(colnames(sigma2))
       ef <- optimise_portfolio(returns, sigma2, boundDat, minTot = 0.01) 
       setnames(ef,old = c("frontier_sd","return","sharpe"),
