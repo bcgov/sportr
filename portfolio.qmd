@@ -110,7 +110,8 @@ boundDat[,`:=`(minWt = 0, maxWt = 1)]
 clim_dat <- get_clim(location) ##yearly climate data
 clim_periods <- get_clim_periods(location)
 clim_history <- get_clim_history(location)
-#clim_normal <- get_clim_normal(location)
+clim_norm_f_annual <- clim_history %>% mutate(period = as.numeric(PERIOD)) %>%  filter(between(period, 1961, 1990)) %>%   summarise_at("CMD", quantile)
+clim_normal <- get_clim_normal(location)
 #BGCmodel <- readRDS("../Common_Files/WNA_BGCv12_10May24.rds")
 BGCmodel <- readRDS("../Build_WNA_BGC_model/WNA_BGCv12_10May24.rds")
 vars.selected <- BGCmodel$variable.importance %>% as.data.frame() %>% rownames_to_column("var") %>% select(var)
