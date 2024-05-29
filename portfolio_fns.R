@@ -61,11 +61,11 @@ get_clim_history <- function(location, years = c(1902:2015)){
   return(clim_dat)
 }
 
-get_clim_normal <- function(location, period = c("1961_1990")){
+get_clim_normal <- function(location){
   #vars_needed <- c("PPT05", "PPT06", "PPT07", "PPT08", "PPT09",
   # "CMD", "PPT_at", "PPT_wt", "CMD07")
   #vars_needed <- c(vars_needed, vars) %>% unique
-  clim_dat <- climr_downscale(location, historic = period, vars = climr::list_variables())
+  clim_dat <- climr_downscale(location, return_normal = TRUE,  vars = climr::list_variables())
   addVars(clim_dat)
   clim_dat <- clim_dat[!is.nan(CMD.total),]
   
