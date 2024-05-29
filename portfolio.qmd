@@ -220,8 +220,9 @@ portfolio1 <- run_portfolio(bgc_ss, sibec, si_default = 7, suit_table = feas, tr
 xx1 <- plot_ef(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9)
 plot(xx1)
 
-port1.ratios <- port_ratios(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9) %>% rename("90% Max_Return" = Set_Return)
-gt(port1.ratios)
+port1.ratios <- port_ratios(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9) %>% rename("90% Return" = Set_Return, "Resilience" = Sharpe_Opt, "Species" = Spp)
+port1.ratios2 <- port1.ratios %>% select(-SSCurrent) %>% mutate(Species = recode(Species, Fd = "Douglas-fir", Sx = "Spruce x", Pl = "lodgepole pine", Lw = "western larch", Py = "Ponderosa pine", Hw = "western hemlock", Cw = "western redcedar", Bl = "subalpine fir", Pw = "western white pine"))
+gt(port1.ratios2)
 ```
 
 ```{r}
@@ -395,6 +396,8 @@ sibec <- sibec %>% mutate_if(is.numeric, round, 1) %>%  mutate(SI = MeanPlotSite
 #current_sibec <- sibec %>% filter(SS_NoSpace == current_unit, TreeSpp %in% tree) 
 
  xx <- sibec_by_year(bgc_ss, SIBEC = sibec, si_default = 15, feas, tree_ls, GCM_run = "1.ACCESS-ESM1-5.ssp245.r10i1p1f1") %>% filter(Spp %in% tree) %>% mutate(MAI = Returns.SI/50)
+ yy <- xx %>%  select(Spp, MAI, Returns.PERIOD) %>% pivot_wider(names_from = Spp, values_from = MAI)
+ fwrite(yy, "example_MAI.csv")
 
  corr.xx <- xx %>% select(Spp, Returns.PERIOD, MAI) %>% as.data.frame %>% 
     #mutate(rn = rowid(Spp)) %>%
