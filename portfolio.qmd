@@ -15,7 +15,7 @@ editor: visual
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, cache.lazy = FALSE)
 library(data.table)
 library(climr)
-library(ccissdev)
+library(ccissr)
 library(sportr)
 library(pool)
 library(foreach)
@@ -29,7 +29,7 @@ library(ranger)
 library(corrplot)
 library(RColorBrewer)
 require(labdsv)
-require(tidyverse)
+#require(tidyverse)
 require(gt)
 require(janitor)
 source("optimisation.R")
@@ -45,9 +45,7 @@ source("pairwise_corr.R")
 req_trees <- c("Ac", "At", "Ba", "Bg", "Bl", "Cw", "Dr", "Ep", "Fd", 
  "Hm", "Hw", "Lw", "Pl", "Pw", "Py", "Sb", "Ss", "Sx", "Yc")
 
-
-feas <- fread("../CCISS_ShinyApp/data-raw/data_tables/Feasibility_v12_15.csv")
-#feas <- fread("F:\\OneDrive - Personal\\OneDrive\\WNA_BGC\\Feasibility_v12_15_DVM.csv")
+feas <- copy(ccissr::S1)
 sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
 #feas <- fread("D:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
 feas <- fread("F:\\OneDrive - Personal\\OneDrive\\WNA_BGC\\Feasibility_v12_15_DVM.csv")
@@ -129,7 +127,6 @@ ggplot(climate, aes(x = PERIOD, y = CMD.total, group = GCM, colour= GCM)) +
   #geom_text(aes(label = BGC), size = 4)
 ```
 
-
 ```{r bgc predictions for portfolio by year}
 clim_dat <- fread("IDFdk3_site_climate.csv")
 clim_dat <- fread("SBSdw3_site_climate.csv")
@@ -148,8 +145,6 @@ clim_normal[,run_id := interaction(id,GCM,SSP,RUN)]
 temp <- unique(bgc_ss[,.(run_id,PERIOD,BGC)])
 fwrite(temp, "normalperiod_predictedBGC.csv")
 ```
-
-
 
 ## Run portfolios
 
@@ -179,7 +174,6 @@ port2.ratios <- port_ratios(portfolio = portfolio2$Portfolio, run_list = portfol
 
 ```
 
-
 ### Examine annual BGC projections
 
 ```{r example annual BGC predictions}
@@ -207,7 +201,6 @@ ggplot(clim_plot, aes(x = PERIOD, y = CMD.total)) +
   geom_line() +
   geom_text(aes(label = BGC), size = 4)
 ```
-
 
 ```{r sibec_by_year}
 GCM_run = "1.ACCESS-ESM1-5.ssp245.r10i1p1f1"
