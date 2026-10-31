@@ -11,6 +11,17 @@ location <- data.table(lat =  49.07449,	lon = -117.62451, elev =	468, id = 1)
 current_unit <- "ICHdw1/101"
 location <- data.table(lat =  49.10443,	lon = -117.78877, elev =	1088, id = 1)
 
+current_unit <- "SBSmc2/01"
+location <- data.table(lat =  54.7797,	lon = -126.91428, elev =	896, id = 1)
+
+get_clim <- function(location, years = 2015:2099){
+  clim_dat <- downscale(location, gcms = list_gcms(), gcm_ssp_years = years, 
+                        ssp = "ssp245", max_run = 3L, vars = list_vars())
+  ccissr::addVars(clim_dat)
+  clim_dat <- clim_dat[!is.nan(CMD.total),]
+  return(clim_dat)
+}
+
 clim_dat <- get_clim(location)
 clim_si <- clim_dat[,.(id,GCM,SSP,RUN,PERIOD, CMD_an, DD5_an)]
 clim_si[,run_id := interaction(id,GCM,SSP,RUN)]
@@ -20,11 +31,11 @@ clim_si <- na.omit(clim_si)
 bgc_ss <- prep_data(clim_dat, BGCmodel, copy(ccissr::S1), copy(ccissr::E1))
 bgc_ss <- unique(bgc_ss)
 
-feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,5), "NoMort" = c(95,85,60,40))
+feas_prob <- data.table(Feas = c(1,2,3,4), PropLoss = c(0.1,0.5,2,4), "NoMort" = c(95,85,60,40))
 
 change_prob <- data.table(FeasDiff = c(-3,-2,-1,0,1,2,3), PropLoss = c(0,0,0,0,1,1,1))
 
-tree_ls <- c("Fd","Pl","At","Lw", "Cw", "Py", "Dr", "Hw", "Pw", "Sx")
+tree_ls <- c("Fd","Pl","At","Lw", "Cw", "Py", "Dr", "Hw", "Pw", "Sx", "Bl")
 boundDat <- data.table(Spp = tree_ls)
 boundDat[,`:=`(minWt = 0, maxWt = 1)]
 
@@ -44,6 +55,7 @@ sim_ls <- list()
 portfolio_ls <- list()
 return_ls <- list()
 count <- 1
+run <- "1.MPI-ESM1-2-HR.ssp245.r2i1p1f1"
 for(run in run_ls){
   ss_run_orig <- bgc_ss[run_id == run,]
   ss_run_orig[,PERIOD := as.integer(PERIOD)]
@@ -54,7 +66,7 @@ for(run in run_ls){
   
   for(tree in tree_ls){
     
-    conditioning <- data.table(species = tree, bgc = "ICHdw1", DD5 = clim$DD5_an, CMD = clim$CMD_an, moisture = 4, nutrient = "C")
+    conditioning <- data.table(species = tree, bgc = "SBSmc2", DD5 = clim$DD5_an, CMD = clim$CMD_an, moisture = 4, nutrient = "C")
     si <- draw_si_sigmoid(
       fit_sigmoid,
       newdata = conditioning,
@@ -139,10 +151,4 @@ lines(x, dgamma(x, 1.5, scale = 0.3), type = "l", lwd = 2, col = "orange")
 lines(x, dgamma(x, 1.5, scale = 0.7), type = "l", lwd = 2, col = "firebrick")
 dev.off()
 
-get_clim <- function(location, years = 2015:2099){
-  clim_dat <- downscale(location, gcms = list_gcms(), gcm_ssp_years = years, 
-                              ssp = "ssp245", max_run = 3L, vars = list_vars())
-  ccissr::addVars(clim_dat)
-  clim_dat <- clim_dat[!is.nan(CMD.total),]
-  return(clim_dat)
-}
+
