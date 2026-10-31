@@ -13,10 +13,9 @@
 # Correlations are projected with nearPD; realised error and repair are recorded.
 # These assumptions describe errors in estimates, not process variability.
 #
-# Uses optimise_portfolio() and its helpers from optimisation.R unchanged.
-# One frontier per draw: highest reported sharpe, lowest reported frontier_sd,
-# and row nearest 90% of THAT frontier's maximum reported return. Ties use the
-# first row. The 90% selection is approximate on the optimiser's finite grid.
+# Uses optimise_portfolio() and its helpers from optimisation.R.
+# Selected mode solves only MaxSharpe and exact 90% of the feasible maximum
+# return. Full mode includes these same direct solutions in its plotting grid.
 # Its target changes per draw; it is not a fixed baseline growth constraint.
 # Species removed by the optimiser receive zero weight for baseline comparison.
 # Selection retains the original variance-based sharpe score; evaluation below
@@ -31,27 +30,28 @@
     file.path(dirname(normalizePath(source_file, mustWork = FALSE)), "optimisation.R")
 })
 
-pt_select_frontier <- function(X, S, optimiser, minTot = .01, return_fraction = .90) {
-  types <- c("MaxSharpe", "90%", "MinVariance")
+pt_select_frontier <- function(X, S, optimiser, minTot = .01, return_fraction = .90,
+                               optimisation_mode = "selected") {
+  types <- c("MaxSharpe", "90%")
   failed <- function(msg) setNames(lapply(types, function(type)
     list(status = "solver_failure", message = msg)), types)
   tryCatch({
     spp <- colnames(X)
     bounds <- data.table::data.table(Spp = spp, minWt = 0, maxWt = 1)
-    ef <- as.data.frame(optimiser(data.table::as.data.table(X), S, bounds, minTot))
+    frontier <- optimiser(data.table::as.data.table(X), S, bounds, minTot, mode=optimisation_mode)
+    indices <- attr(frontier,"selection_rows")
+    maximum_return <- attr(frontier,"maximum_return")
+    if (is.null(indices) || !all(types %in% names(indices)) || length(maximum_return)!=1 || !is.finite(maximum_return))
+      stop("Optimisation requires the updated optimisation.R with shared direct selections.")
+    ef <- as.data.frame(frontier)
     if (!nrow(ef) || !all(c("return", "frontier_sd", "sharpe") %in% names(ef)))
       stop("Optimiser returned an empty or incomplete frontier")
     if (any(!is.finite(ef$return)) || any(!is.finite(ef$frontier_sd)))
       stop("Optimiser returned non-finite frontier returns or risk")
     present <- intersect(spp, names(ef))
     if (!length(present)) stop("Optimiser returned no recognised species weights")
-    target <- return_fraction * max(ef$return)
-    # Keep the optimiser's definitions; do not recompute its Sharpe ranking.
-    sharpe <- ef$sharpe
-    sharpe[!is.finite(sharpe)] <- NA_real_
-    indices <- c(MaxSharpe = if (all(is.na(sharpe))) NA_integer_ else which.max(sharpe),
-                 "90%" = which.min(abs(ef$return - target)),
-                 MinVariance = which.min(ef$frontier_sd))
+    target <- return_fraction * maximum_return
+    # Metadata identifies exactly the same solved portfolios in both modes.
     setNames(lapply(types, function(type) tryCatch({
       j <- indices[[type]]
       if (is.na(j)) stop("No finite Sharpe score")
@@ -65,7 +65,7 @@ pt_select_frontier <- function(X, S, optimiser, minTot = .01, return_fraction = 
         stop("Selected frontier weights do not achieve the reported return")
       list(status = "ok", message = "", weights = w, frontier_row = j,
            estimated_return = estimated_return, frontier_return = ef$return[j],
-           frontier_max_return = max(ef$return), frontier_sharpe = ef$sharpe[j],
+           frontier_max_return = maximum_return, frontier_sharpe = ef$sharpe[j],
            target_return = if (type == "90%") target else NA_real_,
            target_gap = if (type == "90%") estimated_return-target else NA_real_)
     }, error = function(e) list(status = "solver_failure", message = conditionMessage(e)))), types)
@@ -103,7 +103,9 @@ pt_wilson <- function(k, n, confidence = .95) {
 }
 
 # Can also analyse an existing result$runs or read.csv(".../run_results.csv")
-# without rerunning optimisation. Limits apply only to tested grid points.
+# without rerunning optimisation. Limits use MEAN Bray-Curtis distance, matching
+# mean_bray in the heatmap, and apply only to tested grid points. Means exclude
+# unavailable portfolios; their counts and within-rate statistics remain visible.
 summarise_bray_tolerance <- function(runs, bray_tolerance = .10,
                                     required_success = .90, confidence = .95,
                                     output_dir = NULL) {
@@ -129,6 +131,12 @@ summarise_bray_tolerance <- function(runs, bray_tolerance = .10,
   cells <- do.call(rbind, lapply(groups, function(i) {
     x <- runs[i, ]; good <- valid[i]; k <- sum(x$bray_pass); n <- nrow(x)
     ci <- pt_wilson(k, n, confidence)
+    distances <- x$bray[good]
+    mean_bray <- if (length(distances)) mean(distances) else NA_real_
+    # Approximate two-sided t interval for the mean across independent replicates.
+    # Its upper bound supports a stricter mean-distance limit, not a success rate.
+    mean_upper <- if (length(distances)>1) min(1, mean_bray +
+      qt((1+confidence)/2, df=length(distances)-1)*sd(distances)/sqrt(length(distances))) else NA_real_
     # This experiment reuses its deterministic baseline at the origin.
     if (x$GrowthError[1] == 0 && x$CovarianceError[1] == 0 &&
         all(good) && all(abs(x$bray) <= 1e-10)) ci <- c(lower=1,upper=1)
@@ -138,8 +146,11 @@ summarise_bray_tolerance <- function(runs, bray_tolerance = .10,
       exceedances=sum(good & !x$bray_pass),
       exceed_rate_valid=if (any(good)) sum(good & !x$bray_pass)/sum(good) else NA_real_,
       not_within_or_unavailable_rate=1-k/n,
-      estimated_meets_tolerance=k/n >= required_success,
-      supported_meets_tolerance=ci[1] >= required_success)
+      within_rate_estimated_meets_tolerance=k/n >= required_success,
+      within_rate_supported_meets_tolerance=ci[1] >= required_success,
+      mean_bray=mean_bray, mean_bray_upper=mean_upper,
+      estimated_meets_tolerance=is.finite(mean_bray) && mean_bray <= bray_tolerance+1e-10,
+      supported_meets_tolerance=is.finite(mean_upper) && mean_upper <= bray_tolerance+1e-10)
   }))
   rownames(cells) <- NULL
   if (nrow(cells) != length(types)*length(growth_levels)*length(covariance_levels))
@@ -167,6 +178,12 @@ summarise_bray_tolerance <- function(runs, bray_tolerance = .10,
     c("PortfolioType","GrowthErrorUpTo_estimate","GrowthErrorUpTo_supported")],
     covariance_frontier[covariance_frontier$GrowthErrorUpTo==0,
     c("PortfolioType","CovarianceErrorUpTo_estimate","CovarianceErrorUpTo_supported")], by="PortfolioType")
+  for (name in c("growth_frontier", "covariance_frontier", "axis_limits")) {
+    table <- get(name)
+    table$criterion <- "mean_bray"
+    table$bray_tolerance <- bray_tolerance
+    assign(name, table)
+  }
   if (!is.null(output_dir)) {
     filenames <- c("bray_cell_summary.csv", "bray_tolerance_frontier.csv", "bray_covariance_frontier.csv", "bray_axis_limits.csv", "bray_README.txt")
     if (any(file.exists(file.path(output_dir,filenames)))) stop("Bray outputs already exist; choose a new output directory.")
@@ -174,14 +191,19 @@ summarise_bray_tolerance <- function(runs, bray_tolerance = .10,
     tables <- list(cells, growth_frontier, covariance_frontier, axis_limits)
     for (j in seq_along(tables)) write.csv(tables[[j]],file.path(output_dir,filenames[j]),row.names=FALSE)
     writeLines(c(
-      paste("Bray-Curtis tolerance:",bray_tolerance,"; required within-tolerance probability:",required_success),
-      paste("Pointwise Wilson confidence level:",confidence),
+      paste("Axis and frontier criterion: MEAN Bray-Curtis <=",bray_tolerance),
+      "Estimated limits match the mean_bray heatmap, subject to the all-lower-cells rule below.",
+      paste("Supported limits require the approximate",confidence,"two-sided t upper confidence bound on the mean to be within tolerance."),
+      "Means exclude failed/missing portfolios, exactly as in the heatmap for generated results; inspect valid/unavailable counts.",
+      "A cell with no valid distances fails the mean criterion; fewer than two valid distances cannot support a mean confidence bound.",
+      paste("Supplementary within-rate criterion:",required_success,"; Wilson confidence level:",confidence),
+      "required_success affects only supplementary within-rate statistics here, not mean-distance axis limits.",
       "Within-rate uses all attempts. Failed/missing portfolios count as not within tolerance, not measured exceedances.",
       "exceed_rate_valid describes only successfully measured portfolios; unavailable counts are separate.",
       "Frontiers require every tested cell in the rectangle from zero to pass. No interpolation is performed.",
       "Axis limits hold the OTHER input error at zero; their two maxima are not necessarily jointly acceptable.",
       "NA means no qualifying rectangle. A limit at the largest tested level is a lower bound on tolerance; expand the grid.",
-      "Supported limits use pointwise lower confidence bounds, not simultaneous coverage over the grid.",
+      "Confidence bounds are pointwise, not simultaneous coverage over the grid; t bounds approximate the mean's sampling uncertainty.",
       "GrowthError is species-mean error SD relative to its configured scale; CovarianceError retains the source run's mode and units.",
       "This allocation criterion is separate from growth/risk performance criteria."
     ),file.path(output_dir,"bray_README.txt"))
@@ -198,7 +220,8 @@ run_practical_tolerance <- function(
     covariance_mode = c("both", "sd_only", "correlation_only"),
     growth_error_scale = NULL, minTot = .01, optimisation_file = .pt_optimisation_file,
     output_dir = file.path(getwd(), paste0("PracticalTolerance_", format(Sys.time(), "%Y%m%d_%H%M%S"))),
-    bray_tolerance = .10) {
+    bray_tolerance = .10, optimisation_mode = c("selected", "full")) {
+  optimisation_mode <- match.arg(optimisation_mode)
   stopifnot(length(bray_tolerance)==1, is.finite(bray_tolerance), bray_tolerance>=0, bray_tolerance<=1)
   covariance_mode <- match.arg(covariance_mode)
   if (!all(vapply(c("data.table", "nloptr", "Matrix"), requireNamespace, logical(1), quietly = TRUE)))
@@ -249,8 +272,8 @@ run_practical_tolerance <- function(
             length(confidence) == 1, confidence > 0, confidence < 1,
             length(return_fraction) == 1, return_fraction == .90,
             length(minTot) == 1, is.finite(minTot), minTot >= 0, minTot < 1)
-  types <- c("MaxSharpe", "90%", "MinVariance")
-  baselines <- pt_select_frontier(X, S, optimiser, minTot, return_fraction)
+  types <- c("MaxSharpe", "90%")
+  baselines <- pt_select_frontier(X, S, optimiser, minTot, return_fraction, optimisation_mode)
   if (any(vapply(baselines, function(b) b$status != "ok", logical(1))))
     stop("Baseline optimisation failed: ", paste(vapply(baselines, function(b) b$message, character(1)), collapse = "; "))
   baseline <- do.call(rbind, lapply(types, function(type) {
@@ -265,9 +288,9 @@ run_practical_tolerance <- function(
   if (!dir.exists(output_dir)) stop("Could not create output_dir.")
   settings <- as.list(environment())[c("growth_levels", "covariance_levels", "n_rep", "seed",
     "growth_loss_tolerance", "risk_increase_tolerance", "required_success", "confidence",
-    "return_fraction", "minTot", "optimisation_file", "covariance_mode", "growth_error_scale", "bray_tolerance")]
+    "return_fraction", "minTot", "optimisation_file", "covariance_mode", "growth_error_scale", "bray_tolerance", "optimisation_mode")]
   settings$optimiser_md5 <- unname(tools::md5sum(optimisation_file))
-  settings$selection <- "Original frontier: max sharpe, min frontier_sd, closest to 90% of per-run max return"
+  settings$selection <- "Shared direct MaxSharpe and exact 90% of per-run feasible maximum return"
   saveRDS(list(returns = X, covariance = S, settings = settings, baselines = baselines),
           file.path(output_dir, "inputs_and_settings.rds"))
   write.csv(baseline, file.path(output_dir, "baseline_performance.csv"), row.names = FALSE)
@@ -286,7 +309,7 @@ run_practical_tolerance <- function(
       fits <- if (inherits(cv, "error")) setNames(lapply(types, function(type)
         list(status = "covariance_failure", message = conditionMessage(cv))), types) else
         if (ge == 0 && ce == 0) baselines else
-          pt_select_frontier(estimated_X, cv$S, optimiser, minTot, return_fraction)
+          pt_select_frontier(estimated_X, cv$S, optimiser, minTot, return_fraction, optimisation_mode)
       for (type in types) {
         counter <- counter + 1L
         fit <- fits[[type]]
@@ -376,10 +399,11 @@ run_practical_tolerance <- function(
     "CovarianceError means SD-multiplier CV and/or pre-projection correlation-error SD, depending on mode.",
     "Realised covariance errors and repairs are reported separately. Units differ from growth-error fractions.",
     "Success concerns growth/risk relative to matching baseline portfolios, using sqrt(w' S w) for risk.",
-    "Optimisation uses optimisation.R unchanged, including its species removal and variance-based Sharpe score.",
-    "90% selects the nearest frontier row to 0.9 times that run's maximum reported return; ties select the first row.",
-    "target_return changes per run; target_gap is achieved estimated return minus that target (grid approximation).",
-    "The original optimiser does not expose convergence codes; returned weights and achieved returns are checked.",
+    "Optimisation uses shared direct solutions in optimisation.R, retaining species removal and the variance-based Sharpe score.",
+    "Only MaxSharpe and 90% are analysed. Full plotting mode includes the identical direct solutions.",
+    "90% targets exactly 0.9 times that run's feasible maximum return after species removal.",
+    "target_return changes per run; target_gap measures numerical solution error rather than grid approximation.",
+    "Optimiser convergence, bounds, constraints, returned weights and achieved returns are checked.",
     "Results assume the baseline is correct and the specified error distribution is appropriate.",
     "Use independent validation simulations at a chosen boundary before making an accuracy requirement."
   ), file.path(output_dir, "README.txt"))
