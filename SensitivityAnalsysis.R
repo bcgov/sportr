@@ -86,16 +86,15 @@ result <- run_practical_tolerance(
   returns, sigma2,
   
   growth_levels = c(
-    0, seq(0.02, 0.4, length.out = 10)
+     seq(0, 0.1, length.out = 11)
   ),
   
   covariance_levels = c(
-    0, seq(0.02, 0.2, length.out = 10)
+    seq(0, 0.15, length.out = 11)
   ),
   
   covariance_mode = "correlation_only",
   n_rep = 50,
-  seed = 20261031,
   
   growth_loss_tolerance = .10,
   risk_increase_tolerance = .10,
