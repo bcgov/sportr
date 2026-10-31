@@ -31,27 +31,28 @@
     file.path(dirname(normalizePath(source_file, mustWork = FALSE)), "optimisation.R")
 })
 
-pt_select_frontier <- function(X, S, optimiser, minTot = .01, return_fraction = .90) {
-  types <- c("MaxSharpe", "90%", "MinVariance")
+pt_select_frontier <- function(X, S, optimiser, minTot = .01, return_fraction = .90,
+                               optimisation_mode = "selected") {
+  types <- c("MaxSharpe", "90%")
   failed <- function(msg) setNames(lapply(types, function(type)
     list(status = "solver_failure", message = msg)), types)
   tryCatch({
     spp <- colnames(X)
     bounds <- data.table::data.table(Spp = spp, minWt = 0, maxWt = 1)
-    ef <- as.data.frame(optimiser(data.table::as.data.table(X), S, bounds, minTot))
+    frontier <- optimiser(data.table::as.data.table(X), S, bounds, minTot, mode=optimisation_mode)
+    indices <- attr(frontier,"selection_rows")
+    maximum_return <- attr(frontier,"maximum_return")
+    if (is.null(indices) || !all(types %in% names(indices)) || length(maximum_return)!=1 || !is.finite(maximum_return))
+      stop("Optimisation requires the updated optimisation.R with shared direct selections.")
+    ef <- as.data.frame(frontier)
     if (!nrow(ef) || !all(c("return", "frontier_sd", "sharpe") %in% names(ef)))
       stop("Optimiser returned an empty or incomplete frontier")
     if (any(!is.finite(ef$return)) || any(!is.finite(ef$frontier_sd)))
       stop("Optimiser returned non-finite frontier returns or risk")
     present <- intersect(spp, names(ef))
     if (!length(present)) stop("Optimiser returned no recognised species weights")
-    target <- return_fraction * max(ef$return)
-    # Keep the optimiser's definitions; do not recompute its Sharpe ranking.
-    sharpe <- ef$sharpe
-    sharpe[!is.finite(sharpe)] <- NA_real_
-    indices <- c(MaxSharpe = if (all(is.na(sharpe))) NA_integer_ else which.max(sharpe),
-                 "90%" = which.min(abs(ef$return - target)),
-                 MinVariance = which.min(ef$frontier_sd))
+    target <- return_fraction * maximum_return
+    # Metadata identifies exactly the same solved portfolios in both modes.
     setNames(lapply(types, function(type) tryCatch({
       j <- indices[[type]]
       if (is.na(j)) stop("No finite Sharpe score")
@@ -65,7 +66,7 @@ pt_select_frontier <- function(X, S, optimiser, minTot = .01, return_fraction = 
         stop("Selected frontier weights do not achieve the reported return")
       list(status = "ok", message = "", weights = w, frontier_row = j,
            estimated_return = estimated_return, frontier_return = ef$return[j],
-           frontier_max_return = max(ef$return), frontier_sharpe = ef$sharpe[j],
+           frontier_max_return = maximum_return, frontier_sharpe = ef$sharpe[j],
            target_return = if (type == "90%") target else NA_real_,
            target_gap = if (type == "90%") estimated_return-target else NA_real_)
     }, error = function(e) list(status = "solver_failure", message = conditionMessage(e)))), types)
