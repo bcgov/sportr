@@ -5,6 +5,9 @@ library(ccissr)
 library(cmdstanr)
 library(climr)
 library(nloptr)
+require(magrittr)
+
+source("./optimisation.R")
 
 spp_list <- c("Cw", "Pw", "Hw", "Py", "Fd", "Lw")
 
@@ -132,7 +135,7 @@ basecase <- portree(returns, sigma2)
 combinations <- expand.grid(ReturnNoise = 0:10, CovNoise = 0:10)
 port_ls <- list()
 
-for(it in 1:20){
+for(it in 1:10){
   cat(".")
   for(ReturnNoise in 1:10){
     for(CovNoise in 1:10) {
@@ -150,6 +153,7 @@ for(it in 1:20){
 
 res_all <- rbindlist(port_ls, fill = TRUE, idcol = "iteration")
 res_all[is.na(res_all)] <- 0
+basecase <- basecase |> mutate(RetNoise = 0, CovNoise = 0, CovRepairFrobenius = 0, iteration = "base") |> dplyr::select(iteration, everything())
 res_all <- rbind(basecase, res_all, use.names = T)
 fwrite(res_all, "Sensitivity_Results.csv")
 
@@ -170,7 +174,7 @@ result <- run_practical_tolerance(
   ),
   
   covariance_mode = "correlation_only",
-  n_rep = 400,
+  n_rep = 50,
   seed = 20261031,
   
   growth_loss_tolerance = .10,
@@ -182,7 +186,7 @@ result <- run_practical_tolerance(
 efAll <- ef
 RetCurve <- stats::approx(ef$return,ef$frontier_sd,xout = 90)
 ret90 <- RetCurve$y
-maxSharpe <- efAll[sharpe == max(sharpe),!c("Return","Sharpe")]
+maxSharpe <- efAll[sharpe == max(sharpe),!c("return","sharpe")]
 maxSPos <- maxSharpe$Sd
 maxSharpe <- t(maxSharpe) %>% as.data.frame() %>%
   mutate(Spp = rownames(.)) %>% set_colnames(c("Sharpe_Opt","Spp"))
