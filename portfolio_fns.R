@@ -38,6 +38,12 @@ get_clim <- function(location, years = 2015:2099){
 }
 
 
+<<<<<<< HEAD
+get_clim_periods <- function(location, periods = c("2021_2040", "2041_2060", "2061_2080", "2081_2100")){
+  clim_dat <- downscale(location, gcms = list_gcms(), gcm_periods = periods, 
+                              ssps = "ssp245", max_run = 3L, vars = list_vars())
+  ccissr::addVars(clim_dat)
+=======
 get_clim_periods <- function(location, periods = c( "2001_2020", "2021_2040", "2041_2060", "2061_2080", "2081_2100")){
   #vars_needed <- c("PPT05", "PPT06", "PPT07", "PPT08", "PPT09",
   # "CMD", "PPT_at", "PPT_wt", "CMD07")
@@ -45,6 +51,7 @@ get_clim_periods <- function(location, periods = c( "2001_2020", "2021_2040", "2
   clim_dat <- climr_downscale(location, gcm_models = list_gcm(), gcm_period = periods, 
                               ssp = "ssp245", max_run = 3L, return_normal = FALSE, vars = climr::list_variables())
   addVars(clim_dat)
+>>>>>>> 61bd0fce3359d8ad60baa940c6c12623fb488658
   clim_dat <- clim_dat[!is.nan(CMD.total),]
   
   return(clim_dat)
@@ -314,7 +321,7 @@ plot_ef <- function(portfolio, run_list, current_unit, returnValue = 0.9){
   efAll$Unit <- current_unit
   efAll <- efAll[is.finite(Sd),]
   
-  colScale <- makeColScale(unique(efAll[variable != "RealRet",variable]), ccissdev::TreeCols)
+  colScale <- makeColScale(unique(efAll[variable != "RealRet",variable]), ccissr::TreeCols)
   efAll$variable <- factor(efAll$variable, levels = sort(unique(as.character(efAll$variable))))
   
   ggplot(efAll[efAll$variable != "RealRet",],aes(x = Sd, y = value,group = variable))+

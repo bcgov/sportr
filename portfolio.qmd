@@ -15,7 +15,7 @@ editor: visual
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, cache.lazy = FALSE)
 library(data.table)
 library(climr)
-library(ccissdev)
+library(ccissr)
 library(sportr)
 library(pool)
 library(foreach)
@@ -29,7 +29,7 @@ library(ranger)
 library(corrplot)
 library(RColorBrewer)
 require(labdsv)
-require(tidyverse)
+#require(tidyverse)
 require(gt)
 require(ggpubr)
 require(janitor)
@@ -46,10 +46,14 @@ source("pairwise_corr.R")
 req_trees <- c("Ac", "At", "Ba", "Bg", "Bl", "Cw", "Dr", "Ep", "Fd", 
  "Hm", "Hw", "Lw", "Pl", "Pw", "Py", "Sb", "Ss", "Sx", "Yc")
 
+feas <- copy(ccissr::S1)
+sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
+
 
 # feas <- fread("../CCISS_ShinyApp/data-raw/data_tables/Feasibility_v12_15.csv")
 # #feas <- fread("F:\\OneDrive - Personal\\OneDrive\\WNA_BGC\\Feasibility_v12_15_DVM.csv")
 # sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
+
 #feas <- fread("D:\\CommonTables\\TreeFeasibility\\Feasibility_v12_13_w_OHR.csv")
 feas <- fread("F:\\OneDrive - Personal\\OneDrive\\WNA_BGC\\Feasibility_v12_15_DVM.csv")
 sigma_feas <- pairwise_corr(feas, req_trees = req_trees)
@@ -185,7 +189,6 @@ ggplot(data = data.frame(x = c(0, 10)), aes(x = x)) +
         stat_function(fun = dnorm, args = list(mean = 5, sd = sqrt(8)), color = "red")
 
 ```
-
 
 ```{r bgc predictions for portfolio by year}
 #clim_dat <- fread("IDFdk3_site_climate.csv")
@@ -389,7 +392,9 @@ ggplot(clim_plot, aes(x = PERIOD, y = CMD.total)) +
   geom_text(aes(label = BGC), size = 4)
 ```
 
-```{r looks at sibec_by_year}
+
+```{r sibec_by_year}
+
 GCM_run = "1.ACCESS-ESM1-5.ssp245.r10i1p1f1"
 tree = c("Sx", "Pl", "Fd", "Lw")
 sibec <- sibec %>% mutate_if(is.numeric, round, 1) %>%  mutate(SI = MeanPlotSiteIndex)
