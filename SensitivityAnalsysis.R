@@ -11,48 +11,48 @@ require(ggplot2)
 source("./optimisation.R")
 
 ###fully synthetic data
-spp_list <- c("Cw", "Pw", "Hw", "Py", "Fd", "Lw")
-boundDat <- data.table(Spp = names(returns))
-boundDat[,`:=`(minWt = 0, maxWt = 1)]
-
-returns <- data.table(Cw = rep(1,80), Pw = rep(20,80), Hw = rep(40,80),
-                      Py = rep(60,80), Fd = rep(80,80), Lw = rep(100,80))
-returns <- data.table(Cw = rep(100,80), Pw = rep(50,80), Hw = rep(50,80),
-                      Py = rep(50,80), Fd = rep(50,80), Lw = rep(50,80))
-#returns <- returns[,lapply(.SD, function(x) x + rnorm(length(x), 2))]
-sigma <- matrix(data = rep(0, ncol(returns)^2), nrow = ncol(returns))
-diag(sigma) <- 1
-colnames(sigma) <- spp_list
-rownames(sigma) <- spp_list
-
-sigma["Cw","Hw"] <- 0.2
-sigma["Hw","Cw"] <- 0.2
-
-sigma["Cw","Fd"] <- -0.2
-sigma["Fd","Cw"] <- -0.2
-
-ef <- optimise_portfolio(returns, sigma, boundDat, minTot = 0.01) 
-efAll <- melt(ef, id.vars = c("frontier_sd","return","sharpe"))
-RetCurve <- stats::approx(ef$return,ef$frontier_sd,xout = 90)
-ret90 <- RetCurve$y
-ggplot(efAll, aes(x = frontier_sd, y = value)) +
-  geom_area(aes(fill = variable, group = variable), size = 0.00001, col = "grey50", stat = "identity")+
-  geom_line(data = ef, aes(x = frontier_sd, y = return/50), colour = "black", linetype = "F1",linewidth = .75)+
-  scale_x_reverse() +
-  geom_vline(data = ef[sharpe == max(sharpe),], aes(xintercept = frontier_sd,colour = "MaxSharpe"), 
-             linetype = "twodash", size = .75) +
-  geom_vline(xintercept = ret90, linetype = "twodash", size = .75) +
-  xlab("Max Return --> Minimized Risk")+
-  ylab("Portfolio Ratio")+
-  guides(fill=guide_legend("Species"))
-
-maxSharpe <- ef[sharpe == max(sharpe),]
-maxSharpe[,PortfolioType := "MaxSharpe"]
-ret90 <- ef[which.min(abs(return - 0.9*(max(return)))),]
-ret90[,PortfolioType := "90%"]
-minvar <- ef[which.min(frontier_sd),]
-minvar[,PortfolioType := "MinVariance"]
-dat <- rbind(maxSharpe, ret90, minvar)
+# spp_list <- c("Cw", "Pw", "Hw", "Py", "Fd", "Lw")
+# boundDat <- data.table(Spp = names(returns))
+# boundDat[,`:=`(minWt = 0, maxWt = 1)]
+# 
+# returns <- data.table(Cw = rep(1,80), Pw = rep(20,80), Hw = rep(40,80),
+#                       Py = rep(60,80), Fd = rep(80,80), Lw = rep(100,80))
+# returns <- data.table(Cw = rep(100,80), Pw = rep(50,80), Hw = rep(50,80),
+#                       Py = rep(50,80), Fd = rep(50,80), Lw = rep(50,80))
+# #returns <- returns[,lapply(.SD, function(x) x + rnorm(length(x), 2))]
+# sigma <- matrix(data = rep(0, ncol(returns)^2), nrow = ncol(returns))
+# diag(sigma) <- 1
+# colnames(sigma) <- spp_list
+# rownames(sigma) <- spp_list
+# 
+# sigma["Cw","Hw"] <- 0.2
+# sigma["Hw","Cw"] <- 0.2
+# 
+# sigma["Cw","Fd"] <- -0.2
+# sigma["Fd","Cw"] <- -0.2
+# 
+# ef <- optimise_portfolio(returns, sigma, boundDat, minTot = 0.01) 
+# efAll <- melt(ef, id.vars = c("frontier_sd","return","sharpe"))
+# RetCurve <- stats::approx(ef$return,ef$frontier_sd,xout = 90)
+# ret90 <- RetCurve$y
+# ggplot(efAll, aes(x = frontier_sd, y = value)) +
+#   geom_area(aes(fill = variable, group = variable), size = 0.00001, col = "grey50", stat = "identity")+
+#   geom_line(data = ef, aes(x = frontier_sd, y = return/50), colour = "black", linetype = "F1",linewidth = .75)+
+#   scale_x_reverse() +
+#   geom_vline(data = ef[sharpe == max(sharpe),], aes(xintercept = frontier_sd,colour = "MaxSharpe"), 
+#              linetype = "twodash", size = .75) +
+#   geom_vline(xintercept = ret90, linetype = "twodash", size = .75) +
+#   xlab("Max Return --> Minimized Risk")+
+#   ylab("Portfolio Ratio")+
+#   guides(fill=guide_legend("Species"))
+# 
+# maxSharpe <- ef[sharpe == max(sharpe),]
+# maxSharpe[,PortfolioType := "MaxSharpe"]
+# ret90 <- ef[which.min(abs(return - 0.9*(max(return)))),]
+# ret90[,PortfolioType := "90%"]
+# minvar <- ef[which.min(frontier_sd),]
+# minvar[,PortfolioType := "MinVariance"]
+# dat <- rbind(maxSharpe, ret90, minvar)
 
 ###Baseline plus noise################################
 
@@ -81,7 +81,7 @@ ggplot(ef_long, aes(x = frontier_sd, y = value)) +
 
 
 #######################Run Sensivity Analysis######################
-source("PracticalToleranceAnalysis.R")
+source("PracticalToleranceAnalysis_whm.R")
 result <- run_practical_tolerance(
   returns, sigma2,
   
@@ -104,6 +104,7 @@ result <- run_practical_tolerance(
 )
 
 result$bray$axis_limits
+result$summary
 
 
 ###OLD CODE####
