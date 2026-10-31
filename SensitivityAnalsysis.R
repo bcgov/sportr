@@ -9,7 +9,10 @@ require(magrittr)
 
 source("./optimisation.R")
 
+###fully synthetic data
 spp_list <- c("Cw", "Pw", "Hw", "Py", "Fd", "Lw")
+boundDat <- data.table(Spp = names(returns))
+boundDat[,`:=`(minWt = 0, maxWt = 1)]
 
 returns <- data.table(Cw = rep(1,80), Pw = rep(20,80), Hw = rep(40,80),
                       Py = rep(60,80), Fd = rep(80,80), Lw = rep(100,80))
@@ -27,7 +30,33 @@ sigma["Hw","Cw"] <- 0.2
 sigma["Cw","Fd"] <- -0.2
 sigma["Fd","Cw"] <- -0.2
 
+ef <- optimise_portfolio(returns, sigma, boundDat, minTot = 0.01) 
+efAll <- melt(ef, id.vars = c("frontier_sd","return","sharpe"))
+RetCurve <- stats::approx(ef$return,ef$frontier_sd,xout = 90)
+ret90 <- RetCurve$y
+ggplot(efAll, aes(x = frontier_sd, y = value)) +
+  geom_area(aes(fill = variable, group = variable), size = 0.00001, col = "grey50", stat = "identity")+
+  geom_line(data = ef, aes(x = frontier_sd, y = return/50), colour = "black", linetype = "F1",linewidth = .75)+
+  scale_x_reverse() +
+  geom_vline(data = ef[sharpe == max(sharpe),], aes(xintercept = frontier_sd,colour = "MaxSharpe"), 
+             linetype = "twodash", size = .75) +
+  geom_vline(xintercept = ret90, linetype = "twodash", size = .75) +
+  xlab("Max Return --> Minimized Risk")+
+  ylab("Portfolio Ratio")+
+  guides(fill=guide_legend("Species"))
 
+maxSharpe <- ef[sharpe == max(sharpe),]
+maxSharpe[,PortfolioType := "MaxSharpe"]
+ret90 <- ef[which.min(abs(return - 0.9*(max(return)))),]
+ret90[,PortfolioType := "90%"]
+minvar <- ef[which.min(frontier_sd),]
+minvar[,PortfolioType := "MinVariance"]
+dat <- rbind(maxSharpe, ret90, minvar)
+
+###Baseline plus noise
+sigma2 <- fread("Sensitivity_Covariance.csv") |> as.matrix()
+rownames(sigma2) <- colnames(sigma2)
+returns <- fread("Senstivity_Returns.csv")
 # Add Gaussian noise once per unique covariance entry, then project to a
 # positive-definite matrix by flooring eigenvalues. CovNoise/20 remains the
 # pre-projection entrywise SD; projection changes the realised noise distribution.
@@ -87,34 +116,6 @@ if (is.null(rownames(sigma2)) || is.null(colnames(sigma2)) ||
 }
 sigma2 <- sigma2[names(returns), names(returns), drop = FALSE]
 
-
-boundDat <- data.table(Spp = names(returns))
-boundDat[,`:=`(minWt = 0, maxWt = 1)]
-
-ef <- optimise_portfolio(returns, sigma2, boundDat, minTot = 0.01) 
-efAll <- melt(ef, id.vars = c("frontier_sd","return","sharpe"))
-RetCurve <- stats::approx(ef$return,ef$frontier_sd,xout = 90)
-ret90 <- RetCurve$y
-ggplot(efAll, aes(x = frontier_sd, y = value)) +
-  geom_area(aes(fill = variable, group = variable), size = 0.00001, col = "grey50", stat = "identity")+
-  geom_line(data = ef, aes(x = frontier_sd, y = return/50), colour = "black", linetype = "F1",linewidth = .75)+
-  scale_x_reverse() +
-  geom_vline(data = ef[sharpe == max(sharpe),], aes(xintercept = frontier_sd,colour = "MaxSharpe"), 
-             linetype = "twodash", size = .75) +
-  geom_vline(xintercept = ret90, linetype = "twodash", size = .75) +
-  xlab("Max Return --> Minimized Risk")+
-  ylab("Portfolio Ratio")+
-  guides(fill=guide_legend("Species"))
-
-maxSharpe <- ef[sharpe == max(sharpe),]
-maxSharpe[,PortfolioType := "MaxSharpe"]
-ret90 <- ef[which.min(abs(return - 0.9*(max(return)))),]
-ret90[,PortfolioType := "90%"]
-minvar <- ef[which.min(frontier_sd),]
-minvar[,PortfolioType := "MinVariance"]
-dat <- rbind(maxSharpe, ret90, minvar)
-
-
 portree <- function(returns, covariance) {
   boundDat <- data.table(Spp = names(returns))
   boundDat[,`:=`(minWt = 0, maxWt = 1)]
@@ -160,6 +161,7 @@ fwrite(res_all, "Sensitivity_Results.csv")
 
 
 #######################slightly different setup######################
+source("PracticalToleranceAnalysis.R")
 result <- run_practical_tolerance(
   returns, sigma2,
   
@@ -183,43 +185,4 @@ result <- run_practical_tolerance(
   confidence = .95
 )
 
-efAll <- ef
-RetCurve <- stats::approx(ef$return,ef$frontier_sd,xout = 90)
-ret90 <- RetCurve$y
-maxSharpe <- efAll[sharpe == max(sharpe),!c("return","sharpe")]
-maxSPos <- maxSharpe$Sd
-maxSharpe <- t(maxSharpe) %>% as.data.frame() %>%
-  mutate(Spp = rownames(.)) %>% set_colnames(c("Sharpe_Opt","Spp"))
-ret90Props <- efAll[which.min(abs(RealRet - returnValue)),-c("Return","Sharpe")]
-ret90Props <- t(ret90Props) %>% as.data.frame() %>%
-  mutate(Spp = rownames(.)) %>% set_colnames(c("Set_Return","Spp"))
-ret100Props <- efAll[which.min(abs(RealRet - 1)),-c("Return","Sharpe")]
-ret100Props <- t(ret100Props) %>% as.data.frame() %>%
-  mutate(Spp = rownames(.)) %>% set_colnames(c("Max_Return","Spp"))
-maxSharpe$SSCurrent <- current_unit
-maxSharpe$Set_Return <- ret90Props$Set_Return
-maxSharpe$Set_Return[maxSharpe$Spp == "Sd"] <- ret90
-setDT(maxSharpe)
-efAll <- efAll[,-c("Return","Sharpe")]
-efAll <- melt(efAll, id.vars = "Sd")
-efAll$Unit <- current_unit
-efAll <- efAll[is.finite(Sd),]
 
-colScale <- makeColScale(unique(efAll[variable != "RealRet",variable]), ccissr::TreeCols)
-efAll$variable <- factor(efAll$variable, levels = sort(unique(as.character(efAll$variable))))
-
-library(ggplot2)
-ggplot(efAll[efAll$variable != "RealRet",],aes(x = Sd, y = value,group = variable))+
-  geom_area(aes(fill = variable), size = 0.00001, col = "grey50", stat = "identity")+
-  colScale +
-  geom_vline(data = maxSharpe[maxSharpe$Spp == "Sd",], aes(xintercept = Sharpe_Opt,colour = "blue"), 
-             linetype = "twodash", size = .75)+
-  geom_vline(data = maxSharpe[maxSharpe$Spp == "Sd",], aes(xintercept = Set_Return,colour = "grey52"),
-             linetype = "dashed", size = .75)+
-  geom_line(aes(xintercept = ret90, colour = "90% Return"),linetype = "F1",linewidth = .75)+
-  scale_colour_identity(name = "", guide = 'legend', labels = c("Return","MaxSharpe","SetReturn"))+
-  scale_x_reverse() +
-  xlab("Max Return --> Minimized Risk")+
-  ylab("Portfolio Ratio")+
-  guides(fill=guide_legend("Species"))+
-  theme_few()#+
