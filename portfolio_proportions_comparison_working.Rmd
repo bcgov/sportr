@@ -4,311 +4,33 @@ output: html_document
 date: "2026-10-30"
 ---
 
-```{r setup, include=FALSE}
-portfolio <- data.frame(
-  Scenario = c(
-    "Baseline",
-    "Cool_Wet",
-    "Hot_Dry",
-    "Warm_Wet",
-    "Extreme_Dry",
-    "Consensus"
-  ),
-  PL = c(35, 25, 50, 20, 60, 35),  # Lodgepole pine
-  SX = c(30, 35, 15, 30, 10, 25),  # Spruce
-  FD = c(15, 20, 10, 25, 10, 15),  # Douglas-fir
-  BL = c(10, 10, 10, 10, 10, 10),  # Subalpine fir
-  AT = c( 5,  5, 10, 10,  5, 10),  # Aspen
-  CW = c( 5,  5,  5,  5,  5,  5)   # Western redcedar
-)
-
-portfolio
+```{r setup}
+source("./optimisation.R")
+require(nloptr)
 ```
 
-```{r}
-library(tidyverse)
-
-portfolio.long <- portfolio |>
-  pivot_longer(-Scenario,
-               names_to="Species",
-               values_to="Weight")
-
-ggplot(portfolio.long,
-       aes(Scenario, Weight, fill=Species)) +
-   geom_bar(stat="identity") +
-   theme_bw() +
-   ylab("Portfolio allocation (%)") +
-   coord_flip()
-```
-CLR transformation and Aitchison distance
-```{r}
-library(compositions)
-
-X <- portfolio[,-1]
-
-# convert percentages to proportions
-X <- X / 100
-
-# CLR transform
-X.clr <- clr(X)
-
-# Aitchison distance matrix
-D <- dist(X.clr)
-
-round(as.matrix(D),3)
-```
-Heatmap of Aitchison distances
-```{r}
-library(pheatmap)
-
-Dmat <- as.matrix(D)
-
-rownames(Dmat) <- portfolio$Scenario
-colnames(Dmat) <- portfolio$Scenario
-
-pheatmap(Dmat,
-         cluster_rows=TRUE,
-         cluster_cols=TRUE,
-         display_numbers=TRUE)
-```
-
-
-```{r}
-pca <- prcomp(X.clr)
-
-plot(pca$x[,1],
-     pca$x[,2],
-     pch=19,
-     xlab="PC1",
-     ylab="PC2")
-
-text(pca$x[,1],
-     pca$x[,2],
-     labels=portfolio$Scenario,
-     pos=3)
-```
-```{r}
-hc <- hclust(D, method="average")
-
-plot(hc,
-     main="Clustering of Climate Portfolios",
-     xlab="Scenario")
-```
-```{r}
-library(dplyr)
-
-species.stats <- portfolio.long |>
-  group_by(Species) |>
-  summarise(
-    Mean = mean(Weight),
-    SD = sd(Weight),
-    CV = SD/Mean
-  ) |>
-  arrange(desc(CV))
-
-species.stats
-```
-
-```{r}
-ggplot(species.stats,
-       aes(reorder(Species,CV), CV)) +
-   geom_col(fill="steelblue") +
-   coord_flip() +
-   theme_bw() +
-   ylab("Coefficient of Variation")
-```
-```{r}
-consensus <- portfolio |>
-  filter(Scenario=="Consensus") |>
-  select(-Scenario) / 100
-
-cons.clr <- clr(consensus)
-
-dist.to.consensus <- apply(X.clr,1,function(x)
-{
-  sqrt(sum((x-cons.clr)^2))
-})
-
-data.frame(
-  Scenario = portfolio$Scenario,
-  Distance = dist.to.consensus
-)
-
-barplot(dist.to.consensus,
-        names.arg=portfolio$Scenario,
-        las=2,
-        ylab="Aitchison Distance")
-
-```
-```{r}
-# Install if needed
-# install.packages(c("vegan","compositions","remotes"))
-# remotes::install_github("pmartinezarbizu/pairwiseAdonis")
-
-library(vegan)
-library(compositions)
-library(pairwiseAdonis)
-
-#--------------------------------------------------
-# Synthetic portfolio data
-#--------------------------------------------------
-
-portfolio <- data.frame(
-  Scenario = c(
-    "Baseline",
-    "Cool_Wet",
-    "Hot_Dry",
-    "Warm_Wet",
-    "Extreme_Dry",
-    "Consensus"
-  ),
-  PL = c(35,25,50,20,60,35),
-  SX = c(30,35,15,30,10,25),
-  FD = c(15,20,10,25,10,15),
-  BL = c(10,10,10,10,10,10),
-  AT = c(5,5,10,10,5,10),
-  CW = c(5,5,5,5,5,5)
-)
-
-#--------------------------------------------------
-# Create replicates to mimic climate futures
-#--------------------------------------------------
-
-set.seed(123)
-
-nrep <- 10
-
-port.rep <- do.call(rbind,
-                    lapply(1:nrow(portfolio), function(i){
-
-                      tmp <- portfolio[rep(i,nrep),]
-
-                      for(sp in names(tmp)[-1]){
-                        tmp[[sp]] <- tmp[[sp]] +
-                          rnorm(nrep,0,2)
-                      }
-
-                      tmp[tmp < 0] <- 0.01
-
-                      # renormalize to 100%
-                      spp <- names(tmp)[-1]
-                      rs <- rowSums(tmp[,spp])
-
-                      tmp[,spp] <- sweep(tmp[,spp],1,rs,"/")*100
-
-                      tmp
-                    }))
-
-#--------------------------------------------------
-# CLR transformation
-#--------------------------------------------------
-
-X <- port.rep[, -1] / 100
-
-X.clr <- clr(X)
-
-#--------------------------------------------------
-# Global PERMANOVA
-#--------------------------------------------------
-
-adonis.res <- adonis2(
-  X.clr ~ Scenario,
-  data = port.rep,
-  permutations = 999,
-  method = "euclidean"
-)
-
-adonis.res
-```
-```{r}
-#--------------------------------------------------
-# Pairwise PERMANOVA
-#--------------------------------------------------
-library(vegan)
-
-pairwise_permanova <- function(X, group,
-                               permutations = 999,
-                               p.adjust.method = "BH") {
-
-  group <- factor(group)
-
-  combs <- combn(levels(group), 2)
-
-  out <- data.frame()
-
-  for(i in seq_len(ncol(combs))) {
-
-    g1 <- combs[1,i]
-    g2 <- combs[2,i]
-
-    keep <- group %in% c(g1, g2)
-
-    X.sub <- X[keep,,drop=FALSE]
-    grp.sub <- droplevels(group[keep])
-
-    mod <- adonis2(
-      X.sub ~ grp.sub,
-      permutations = permutations,
-      method = "euclidean"
-    )
-
-    out <- rbind(
-      out,
-      data.frame(
-        Group1 = g1,
-        Group2 = g2,
-        F = mod$F[1],
-        R2 = mod$R2[1],
-        P = mod$`Pr(>F)`[1]
-      )
-    )
-  }
-
-  out$P.adj <- p.adjust(out$P,
-                        method = p.adjust.method)
-
-  out[order(out$P.adj),]
-}
-```
-
-```{r}
-pairwise_results <- pairwise_permanova(
-  X.clr,
-  port.rep$Scenario
-)
-
-pairwise_results
-```
 ############################################################
 # MPT PORTFOLIO ROBUSTNESS ANALYSIS
 #
 # How accurate must return and covariance estimates be
 # before portfolio recommendations change substantially?
 ############################################################
-
 ```{r}
 ############################################################
 # MPT PORTFOLIO ROBUSTNESS ANALYSIS
 #
-# Goal:
-# Evaluate how uncertainty in return estimates and
-# correlation estimates affects portfolio stability.
-#
-# Outputs:
-#   - Baseline portfolio
-#   - Effective species number
-#   - Aitchison distance
-#   - Portfolio allocation shift
-#   - Stability surfaces
-#   - PCA
-#   - Species sensitivity
-#   - Elasticity analysis
+# Requires:
+# optimise_portfolio()
+# .set_target()
+# .efficient_return()
+# .portfolio_volatility()
+# .portfolio_return()
 ############################################################
 
+library(data.table)
 library(tidyverse)
 library(compositions)
 library(Matrix)
-library(quadprog)
 library(effectsize)
 
 set.seed(123)
@@ -317,11 +39,12 @@ set.seed(123)
 # SETTINGS
 ############################################################
 
-lambda <- 1.0
 eps <- 1e-6
 
-aitchison_threshold <- 1.0
 shift_threshold <- 0.20
+
+n_rep <- 100
+nstands <- 500
 
 ############################################################
 # SPECIES
@@ -333,10 +56,7 @@ species <- c(
 )
 
 ############################################################
-# EXPECTED RETURNS
-#
-# Intentionally close together so
-# correlations influence diversification
+# SITE INDEX MEANS
 ############################################################
 
 mu_true <- c(
@@ -349,7 +69,7 @@ mu_true <- c(
 )
 
 ############################################################
-# SPECIES SD
+# SITE INDEX SD
 ############################################################
 
 sd_true <- c(
@@ -366,22 +86,32 @@ sd_true <- c(
 ############################################################
 
 cor_true <- matrix(c(
-   1.00, 0.60, 0.20,-0.10,-0.30,-0.20,
-   0.60, 1.00, 0.30, 0.00,-0.20,-0.30,
-   0.20, 0.30, 1.00, 0.40,-0.10, 0.00,
-  -0.10, 0.00, 0.40, 1.00, 0.30, 0.20,
-  -0.30,-0.20,-0.10, 0.30, 1.00, 0.50,
-  -0.20,-0.30, 0.00, 0.20, 0.50, 1.00
+  1.00, 0.60, 0.20,-0.10,-0.30,-0.20,
+  0.60, 1.00, 0.30, 0.00,-0.20,-0.30,
+  0.20, 0.30, 1.00, 0.40,-0.10, 0.00,
+ -0.10, 0.00, 0.40, 1.00, 0.30, 0.20,
+ -0.30,-0.20,-0.10, 0.30, 1.00, 0.50,
+ -0.20,-0.30, 0.00, 0.20, 0.50, 1.00
 ),6,6,byrow=TRUE)
 
-############################################################
-# CHECK CORRELATION MATRIX
-############################################################
-
-print(eigen(cor_true)$values)
+rownames(cor_true) <- species
+colnames(cor_true) <- species
 
 ############################################################
-# BUILD COVARIANCE
+# SYNTHETIC SITE INDEX OBSERVATIONS
+############################################################
+
+returns_true <- data.table(
+  PL = rnorm(nstands, mu_true["PL"], sd_true["PL"]),
+  SX = rnorm(nstands, mu_true["SX"], sd_true["SX"]),
+  FD = rnorm(nstands, mu_true["FD"], sd_true["FD"]),
+  BL = rnorm(nstands, mu_true["BL"], sd_true["BL"]),
+  AT = rnorm(nstands, mu_true["AT"], sd_true["AT"]),
+  CW = rnorm(nstands, mu_true["CW"], sd_true["CW"])
+)
+
+############################################################
+# BASELINE COVARIANCE
 ############################################################
 
 Sigma_true <-
@@ -389,57 +119,71 @@ Sigma_true <-
   cor_true %*%
   diag(sd_true)
 
+rownames(Sigma_true) <- species
+colnames(Sigma_true) <- species
+
 ############################################################
-# MPT OPTIMIZER
+# CONSTRAINTS
 ############################################################
 
-mpt_portfolio <- function(mu,
-                          Sigma,
-                          lambda = 1){
+boundDat <- data.table(
+  Spp   = species,
+  minWt = rep(0,length(species)),
+  maxWt = rep(1,length(species))
+)
 
-  Dmat <- 2 * lambda * Sigma
+minTot <- 0.02
 
-  sol <- solve.QP(
-    Dmat = Dmat,
-    dvec = mu,
-    Amat = cbind(
-      rep(1,length(mu)),
-      diag(length(mu))
-    ),
-    bvec = c(1, rep(0,length(mu))),
-    meq = 1
+############################################################
+# BASELINE OPTIMIZATION
+############################################################
+
+frontier_base <-
+  optimise_portfolio(
+    returns = returns_true,
+    cov_matrix = Sigma_true,
+    boundDat = boundDat,
+    minTot = minTot
   )
 
-  w <- sol$solution
+base_row <-
+  frontier_base[
+    which.max(sharpe)
+  ]
 
-  w[w < 0] <- 0
+baseline_w <- setNames(
+  rep(0,length(species)),
+  species
+)
 
-  w <- w/sum(w)
-
-  names(w) <- names(mu)
-
-  return(w)
-}
-
-############################################################
-# BASELINE PORTFOLIO
-############################################################
-
-baseline_w <-
-  mpt_portfolio(
-    mu_true,
-    Sigma_true,
-    lambda
+available_species <-
+  intersect(
+    species,
+    names(base_row)
   )
 
-cat("\nBaseline portfolio\n")
-print(round(baseline_w,3))
+baseline_w[available_species] <-
+  as.numeric(
+    base_row[, ..available_species]
+  )
+
+cat("\nBaseline Portfolio\n")
+
+print(
+  round(
+    baseline_w,
+    3
+  )
+)
 
 ############################################################
-# EFFECTIVE NUMBER OF SPECIES
+# EFFECTIVE SPECIES NUMBER
 ############################################################
 
-w_nonzero <- baseline_w[baseline_w > 0]
+w_nonzero <-
+  baseline_w[
+    baseline_w > 0
+  ]
 
 effective_species <-
   exp(
@@ -466,37 +210,50 @@ baseline_clr <-
         baseline_w,
         eps
       ),
-      nrow = 1
+      nrow=1
     )
   )
 
 ############################################################
-# PERTURB RETURNS
-#
-# noise = proportion error
+# RETURN PERTURBATION
 ############################################################
 
-perturb_returns <- function(mu,
-                            noise){
+perturb_returns <- function(
+  retmat,
+  noise
+){
 
-  mu *
-    exp(
-      rnorm(
-        length(mu),
-        0,
-        noise
-      )
-    )
+  out <- copy(retmat)
+
+  out[, (species) :=
+        lapply(
+          .SD,
+          function(x){
+
+            x *
+              exp(
+                rnorm(
+                  length(x),
+                  0,
+                  noise
+                )
+              )
+
+          }
+        ),
+      .SDcols = species]
+
+  out
 }
 
 ############################################################
-# PERTURB CORRELATIONS
-#
-# noise = proportional error
+# CORRELATION PERTURBATION
 ############################################################
 
-perturb_correlation <- function(cor_mat,
-                                noise){
+perturb_correlation <- function(
+  cor_mat,
+  noise
+){
 
   new_cor <- cor_mat
 
@@ -504,8 +261,8 @@ perturb_correlation <- function(cor_mat,
 
   error <- rnorm(
     sum(idx),
-    mean = 0,
-    sd = noise
+    0,
+    noise
   )
 
   new_cor[idx] <-
@@ -524,9 +281,12 @@ perturb_correlation <- function(cor_mat,
     as.matrix(
       nearPD(
         new_cor,
-        corr=TRUE
+        corr = TRUE
       )$mat
     )
+
+  rownames(new_cor) <- species
+  colnames(new_cor) <- species
 
   return(new_cor)
 }
@@ -546,8 +306,6 @@ corr_noise <- seq(
   0.50,
   length.out = 10
 )
-
-n_rep <- 100
 
 grid <- expand.grid(
   ReturnNoise = return_noise,
@@ -573,11 +331,14 @@ for(i in seq_len(nrow(grid))){
   rtn <- grid$ReturnNoise[i]
   cor_n <- grid$CorrNoise[i]
 
-  mu_star <-
+  returns_star <-
     perturb_returns(
-      mu_true,
+      returns_true,
       rtn
     )
+
+  returns_star <-
+    returns_star[, ..species]
 
   cor_star <-
     perturb_correlation(
@@ -585,20 +346,61 @@ for(i in seq_len(nrow(grid))){
       cor_n
     )
 
-  Sigma_star <-
-    diag(sd_true) %*%
-    cor_star %*%
-    diag(sd_true)
+  sd_star <-
+    apply(
+      returns_star,
+      2,
+      sd
+    )
 
-  w_star <-
-    mpt_portfolio(
-      mu_star,
-      Sigma_star,
-      lambda
+  Sigma_star <-
+    diag(sd_star) %*%
+    cor_star %*%
+    diag(sd_star)
+
+  rownames(Sigma_star) <- species
+  colnames(Sigma_star) <- species
+
+  Sigma_star <-
+    Sigma_star[
+      species,
+      species
+    ]
+
+  frontier_star <-
+    optimise_portfolio(
+      returns = returns_star,
+      cov_matrix = Sigma_star,
+      boundDat = boundDat,
+      minTot = minTot
+    )
+
+  best_star <-
+    frontier_star[
+      which.max(sharpe)
+    ]
+
+  w_star <- setNames(
+    rep(0,length(species)),
+    species
+  )
+
+  available_species <-
+    intersect(
+      species,
+      names(best_star)
+    )
+
+  w_star[available_species] <-
+    as.numeric(
+      best_star[
+        ,
+        ..available_species
+      ]
     )
 
   ##########################################################
-  # AITCHISON DISTANCE
+  # DISTANCE METRICS
   ##########################################################
 
   clr_star <-
@@ -615,14 +417,12 @@ for(i in seq_len(nrow(grid))){
   dA <-
     sqrt(
       sum(
-        (baseline_clr -
-           clr_star)^2
+        (
+          baseline_clr -
+            clr_star
+        )^2
       )
     )
-
-  ##########################################################
-  # PORTFOLIO SHIFT
-  ##########################################################
 
   shift <-
     sum(
@@ -632,12 +432,20 @@ for(i in seq_len(nrow(grid))){
       )
     ) / 2
 
+  richness <-
+    sum(
+      w_star > minTot
+    )
+
+  ##########################################################
+
   results[[i]] <-
     data.frame(
       ReturnNoise = rtn,
       CorrNoise = cor_n,
       Distance = dA,
       Shift = shift,
+      Richness = richness,
       t(w_star)
     )
 }
@@ -645,271 +453,80 @@ for(i in seq_len(nrow(grid))){
 results <- bind_rows(results)
 
 ############################################################
-# DISTANCE SURFACE
+# SUMMARY SURFACE
 ############################################################
 
-surface <- results %>%
+surface <-
+  results %>%
   group_by(
     ReturnNoise,
     CorrNoise
   ) %>%
   summarise(
-    MeanDistance =
-      mean(Distance),
+    MeanDistance = mean(Distance),
 
-    MeanShift =
-      mean(Shift),
+    MeanShift = mean(Shift),
 
-    PrAitchison =
-      mean(
-        Distance >
-          aitchison_threshold
-      ),
+    SDShift = sd(Shift),
 
     PrShift =
       mean(
         Shift >
-          shift_threshold
+        shift_threshold
       ),
 
-    .groups="drop"
-  )
+    MeanRichness =
+      mean(Richness),
 
-
-
-############################################################
-# FIGURE 1
-############################################################
-
-ggplot(
-  surface,
-  aes(
-    ReturnNoise,
-    CorrNoise,
-    fill = MeanDistance
-  )
-)+
-  geom_tile()+
-  scale_fill_viridis_c()+
-  theme_bw()+
-  labs(
-    fill="Mean\nAitchison",
-    title="Portfolio Divergence Surface"
-  )
-
-############################################################
-# PROBABILITY OF EXCEEDING THRESHOLD
-############################################################
-
-prob_change <-
-  results %>%
-  group_by(
-    ReturnNoise,
-    CorrNoise
-  ) %>%
-  summarise(
-    Probability =
-      mean(Distance > aitchison_threshold),
     .groups="drop"
   )
 
 ############################################################
-# FIGURE 2
-############################################################
-
-ggplot(
-  prob_change,
-  aes(
-    ReturnNoise,
-    CorrNoise,
-    fill = Probability
-  )
-)+
-  geom_tile()+
-  scale_fill_viridis_c()+
-  theme_bw()+
-  labs(
-    fill="Pr(Change)",
-    title="Probability Portfolio Exceeds Threshold"
-  )
-
-############################################################
-# PCA
-############################################################
-
-W <- as.matrix(
-  results[,species]
-)
-
-W.clr <- clr(W)
-
-pca <- prcomp(W.clr)
-
-scores <- data.frame(
-  pca$x[,1:2],
-  results[,c(
-    "ReturnNoise",
-    "CorrNoise"
-  )]
-)
-
-ggplot(
-  scores,
-  aes(
-    PC1,
-    PC2,
-    colour = ReturnNoise
-  )
-)+
-  geom_point(alpha=.1)+
-  theme_bw()
-
-############################################################
-# SPECIES SENSITIVITY
-############################################################
-
-species_long <-
-  results %>%
-  pivot_longer(
-    cols = all_of(species),
-    names_to = "Species",
-    values_to = "Weight"
-  )
-
-species_summary <-
-  species_long %>%
-  group_by(Species) %>%
-  summarise(
-    Mean = mean(Weight),
-    SD = sd(Weight),
-    CV = SD/Mean
-  ) %>%
-  arrange(desc(CV))
-
-print(species_summary)
-
-############################################################
-# LINEAR MODEL
-############################################################
-
-model <- lm(
-  Distance ~
-    ReturnNoise *
-    CorrNoise,
-  data = results
-)
-
-summary(model)
-
-anova(model)
-
-############################################################
-# ELASTICITY ANALYSIS
-############################################################
-
-std_eff <-
-  standardize_parameters(
-    model
-  )
-
-print(std_eff)
-
-beta_return <-
-  std_eff$Std_Coefficient[
-    std_eff$Parameter ==
-      "ReturnNoise"
-  ]
-
-beta_corr <-
-  std_eff$Std_Coefficient[
-    std_eff$Parameter ==
-      "CorrNoise"
-  ]
-
-elasticity_ratio <-
-  beta_corr /
-  beta_return
-
-cat(
-  "\nCorrelation uncertainty is",
-  round(elasticity_ratio,2),
-  "times more influential than return uncertainty.\n"
-)
-
-############################################################
-# THRESHOLD FRONTIER
-############################################################
-
-frontier <-
-  surface %>%
-  filter(
-    MeanDistance <= aitchison_threshold
-  ) %>%
-  mutate(
-    TotalNoise =
-      ReturnNoise +
-      CorrNoise
-  ) %>%
-  arrange(
-    desc(TotalNoise)
-  )
-
-cat(
-  "\nMost permissive acceptable combination:\n"
-)
-
-print(frontier[1,])
-
-############################################################
-# RETURN ONLY THRESHOLD
+# THRESHOLDS
 ############################################################
 
 return_threshold <-
   surface %>%
-  filter(
-    CorrNoise == 0,
-    MeanDistance <= aitchison_threshold
-  ) %>%
+  filter(CorrNoise == 0) %>%
+  filter(MeanShift <= shift_threshold) %>%
   summarise(
     MaxReturnNoise =
       max(ReturnNoise)
   )
 
-print(return_threshold)
-
-############################################################
-# CORRELATION ONLY THRESHOLD
-############################################################
-
 corr_threshold <-
   surface %>%
-  filter(
-    ReturnNoise == 0,
-    MeanDistance <= aitchison_threshold
-  ) %>%
+  filter(ReturnNoise == 0) %>%
+  filter(MeanShift <= shift_threshold) %>%
   summarise(
     MaxCorrNoise =
       max(CorrNoise)
   )
 
+print(return_threshold)
 print(corr_threshold)
 
-return_only <- surface %>%
-  filter(CorrNoise == 0)
+############################################################
+# ELASTICITY
+############################################################
 
-ggplot(
-  return_only,
-  aes(ReturnNoise, MeanShift)
-) +
-  geom_line() +
-  geom_hline(
-    yintercept = shift_threshold,
-    colour = "red"
+model <-
+  lm(
+    Shift ~
+      ReturnNoise *
+      CorrNoise,
+    data = results
   )
 
+elasticity <-
+  standardize_parameters(
+    model
+  )
+
+print(elasticity)
 
 ############################################################
-# THRESHOLD CONTOUR
+# PLOTS
 ############################################################
 
 ggplot(
@@ -917,45 +534,84 @@ ggplot(
   aes(
     ReturnNoise,
     CorrNoise,
-    z = MeanDistance
+    fill = MeanShift
   )
 )+
-  geom_contour_filled()+
-  geom_contour(
-    breaks = shift_threshold,
-    colour = "red",
-    linewidth = 1
-  )+
+  geom_tile()+
+  scale_fill_viridis_c()+
+  theme_bw()
+
+ggplot(
+  surface,
+  aes(
+    ReturnNoise,
+    CorrNoise,
+    fill = PrShift
+  )
+)+
+  geom_tile()+
+  scale_fill_viridis_c()+
+  theme_bw()
+
+
+############################################################
+# FIGURES
+############################################################
+
+ggplot(
+  surface,
+  aes(
+    ReturnNoise,
+    CorrNoise,
+    fill = MeanShift
+  )
+)+
+  geom_tile()+
+  scale_fill_viridis_c()+
   theme_bw()+
   labs(
-    title = "Portfolio Stability Boundary",
-    subtitle =
-      paste(
-        "Red contour = Aitchison",
-        aitchison_threshold
-      )
+    title="Mean Portfolio Reallocation",
+    fill="Shift"
   )
 
-return_only %>%
-  filter(
-    MeanShift <= shift_threshold
-  ) %>%
-  summarise(
-    MaxReturnNoise =
-      max(ReturnNoise)
+ggplot(
+  surface,
+  aes(
+    ReturnNoise,
+    CorrNoise,
+    fill = PrShift
+  )
+)+
+  geom_tile()+
+  scale_fill_viridis_c()+
+  theme_bw()+
+  labs(
+    title="Probability Shift > 20%",
+    fill="Probability"
   )
 
-corr_only <- surface %>%
-  filter(ReturnNoise == 0)
+ggplot(
+  surface %>% filter(CorrNoise==0),
+  aes(ReturnNoise,MeanShift)
+)+
+  geom_line()+
+  geom_hline(
+    yintercept = shift_threshold,
+    colour="red"
+  )+
+  theme_bw()
 
-corr_only %>%
-  filter(
-    MeanShift <= shift_threshold
-  ) %>%
-  summarise(
-    MaxCorrNoise =
-      max(CorrNoise)
-  )
+ggplot(
+  surface %>% filter(ReturnNoise==0),
+  aes(CorrNoise,MeanShift)
+)+
+  geom_line()+
+  geom_hline(
+    yintercept = shift_threshold,
+    colour="red"
+  )+
+  theme_bw()
 ```
+
 
 
