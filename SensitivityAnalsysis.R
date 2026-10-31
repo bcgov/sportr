@@ -6,6 +6,7 @@ library(cmdstanr)
 library(climr)
 library(nloptr)
 require(magrittr)
+require(ggplot2)
 
 source("./optimisation.R")
 
