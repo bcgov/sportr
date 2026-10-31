@@ -3,7 +3,7 @@
 # source("PracticalToleranceAnalysis.R")
 # result <- run_practical_tolerance(returns, sigma2)
 # Quick pilot: result <- run_practical_tolerance(returns, sigma2, n_rep = 20)
-# Requires quadprog and Matrix. install.packages("quadprog") if needed.
+# Requires data.table, nloptr and Matrix, plus optimisation.R beside this script.
 # Sourcing defines functions only: it does not overwrite inputs or run the grid.
 #
 # Defaults: Gaussian species-mean error SD = growth_error * abs(mean growth).
@@ -13,42 +13,63 @@
 # Correlations are projected with nearPD; realised error and repair are recorded.
 # These assumptions describe errors in estimates, not process variability.
 #
-# Optimisation: long-only, fully invested, no minimum allocation or species-removal
-# heuristic. MinVariance and FixedGrowth are exact convex QPs. MaxSharpe maximises
-# mean growth / SD with zero reference return. These definitions differ from the
-# old optimiser's (return - minimum-frontier-return) / variance score.
-# FixedGrowth uses 90% of the baseline maximum species mean, unchanged in all runs.
+# Uses optimise_portfolio() and its helpers from optimisation.R unchanged.
+# One frontier per draw: highest reported sharpe, lowest reported frontier_sd,
+# and row nearest 90% of THAT frontier's maximum reported return. Ties use the
+# first row. The 90% selection is approximate on the optimiser's finite grid.
+# Its target changes per draw; it is not a fixed baseline growth constraint.
+# Species removed by the optimiser receive zero weight for baseline comparison.
+# Selection retains the original variance-based sharpe score; evaluation below
+# uses sqrt(w' S w) for risk. minTot defaults to the original 0.01 removal rule.
 # All performance is evaluated under the SAME baseline mean and covariance.
 # If sigma2 is a correlation matrix, risk is an index in those units, not growth SD.
 # Use a covariance in growth units when interpreting risk as growth uncertainty.
 
-pt_solve <- function(mu, S, type, target) {
-  n <- length(mu)
-  if (type == "FixedGrowth" && max(mu) < target - 1e-10 * max(1, abs(target)))
-    return(list(status = "infeasible_target", message = "Target exceeds maximum estimated growth"))
-  if (type == "MaxSharpe" && max(mu) <= 0)
-    return(list(status = "undefined_sharpe", message = "No positive expected growth"))
+.pt_optimisation_file <- local({
+  source_file <- tryCatch(sys.frame(1)$ofile, error = function(e) NULL)
+  if (is.null(source_file)) "optimisation.R" else
+    file.path(dirname(normalizePath(source_file, mustWork = FALSE)), "optimisation.R")
+})
+
+pt_select_frontier <- function(X, S, optimiser, minTot = .01, return_fraction = .90) {
+  types <- c("MaxSharpe", "90%", "MinVariance")
+  failed <- function(msg) setNames(lapply(types, function(type)
+    list(status = "solver_failure", message = msg)), types)
   tryCatch({
-    # Scaling improves numerical conditioning without changing the optimum.
-    D <- 2 * S / max(diag(S))
-    if (type == "MaxSharpe") {
-      A <- cbind(mu / max(abs(mu)), diag(n))
-      b <- c(1, rep(0, n))
-    } else {
-      A <- cbind(rep(1, n), diag(n)); b <- c(1, rep(0, n))
-      if (type == "FixedGrowth") {
-        scale <- max(abs(mu), abs(target), .Machine$double.eps)
-        A <- cbind(A, mu / scale); b <- c(b, target / scale)
-      }
-    }
-    w <- quadprog::solve.QP(D, rep(0, n), A, b, meq = 1)$solution
-    if (any(!is.finite(w)) || min(w) < -1e-7 || sum(w) <= 0)
-      stop("Invalid optimiser weights")
-    w <- pmax(w, 0); w <- w / sum(w)
-    if (type == "FixedGrowth" && sum(w * mu) < target - 1e-7 * max(1, abs(target)))
-      stop("Returned weights violate growth target")
-    list(status = "ok", message = "", weights = w)
-  }, error = function(e) list(status = "solver_failure", message = conditionMessage(e)))
+    spp <- colnames(X)
+    bounds <- data.table::data.table(Spp = spp, minWt = 0, maxWt = 1)
+    ef <- as.data.frame(optimiser(data.table::as.data.table(X), S, bounds, minTot))
+    if (!nrow(ef) || !all(c("return", "frontier_sd", "sharpe") %in% names(ef)))
+      stop("Optimiser returned an empty or incomplete frontier")
+    if (any(!is.finite(ef$return)) || any(!is.finite(ef$frontier_sd)))
+      stop("Optimiser returned non-finite frontier returns or risk")
+    present <- intersect(spp, names(ef))
+    if (!length(present)) stop("Optimiser returned no recognised species weights")
+    target <- return_fraction * max(ef$return)
+    # Keep the optimiser's definitions; do not recompute its Sharpe ranking.
+    sharpe <- ef$sharpe
+    sharpe[!is.finite(sharpe)] <- NA_real_
+    indices <- c(MaxSharpe = if (all(is.na(sharpe))) NA_integer_ else which.max(sharpe),
+                 "90%" = which.min(abs(ef$return - target)),
+                 MinVariance = which.min(ef$frontier_sd))
+    setNames(lapply(types, function(type) tryCatch({
+      j <- indices[[type]]
+      if (is.na(j)) stop("No finite Sharpe score")
+      w <- setNames(numeric(length(spp)), spp)
+      w[present] <- as.numeric(ef[j, present, drop = TRUE])
+      if (any(!is.finite(w)) || min(w) < -1e-6 || abs(sum(w)-1) > 1e-5)
+        stop("Selected frontier row has invalid weights")
+      w <- pmax(w, 0); w <- w/sum(w)
+      estimated_return <- sum(w * colMeans(X))
+      if (abs(estimated_return - ef$return[j]) > 1e-4 * max(1, abs(ef$return[j])))
+        stop("Selected frontier weights do not achieve the reported return")
+      list(status = "ok", message = "", weights = w, frontier_row = j,
+           estimated_return = estimated_return, frontier_return = ef$return[j],
+           frontier_max_return = max(ef$return), frontier_sharpe = ef$sharpe[j],
+           target_return = if (type == "90%") target else NA_real_,
+           target_gap = if (type == "90%") estimated_return-target else NA_real_)
+    }, error = function(e) list(status = "solver_failure", message = conditionMessage(e)))), types)
+  }, error = function(e) failed(conditionMessage(e)))
 }
 
 pt_covariance <- function(S, error, z_sd, z_cor, mode) {
@@ -81,17 +102,116 @@ pt_wilson <- function(k, n, confidence = .95) {
   c(lower = max(0, center-half), upper = min(1, center+half))
 }
 
+# Can also analyse an existing result$runs or read.csv(".../run_results.csv")
+# without rerunning optimisation. Limits apply only to tested grid points.
+summarise_bray_tolerance <- function(runs, bray_tolerance = .10,
+                                    required_success = .90, confidence = .95,
+                                    output_dir = NULL) {
+  stopifnot(length(bray_tolerance) == 1, is.finite(bray_tolerance),
+            bray_tolerance >= 0, bray_tolerance <= 1,
+            length(required_success) == 1, required_success > 0, required_success < 1,
+            length(confidence) == 1, confidence > 0, confidence < 1)
+  runs <- as.data.frame(runs)
+  key <- c("PortfolioType", "GrowthError", "CovarianceError")
+  if (!all(c(key, "Replicate", "status", "bray") %in% names(runs)) || !nrow(runs))
+    stop("Supply run_results.csv or result$runs, including replicate IDs, status and Bray-Curtis distances.")
+  if (anyNA(runs[c(key, "Replicate", "status")]) || anyDuplicated(runs[c(key,"Replicate")]))
+    stop("Missing IDs/status or duplicate portfolio/cell/replicate keys.")
+  if (any(!is.finite(runs$GrowthError)) || any(!is.finite(runs$CovarianceError)) ||
+      any(runs$GrowthError < 0) || any(runs$CovarianceError < 0)) stop("Invalid error levels.")
+  valid <- runs$status == "ok" & is.finite(runs$bray)
+  if (any(runs$bray[valid] < -1e-10 | runs$bray[valid] > 1+1e-10)) stop("Invalid Bray-Curtis distance.")
+  runs$bray_pass <- valid & !is.na(runs$bray) & runs$bray <= bray_tolerance + 1e-10
+  types <- unique(runs$PortfolioType)
+  growth_levels <- sort(unique(runs$GrowthError)); covariance_levels <- sort(unique(runs$CovarianceError))
+  if (!0 %in% growth_levels || !0 %in% covariance_levels) stop("Both axes must include zero.")
+  groups <- split(seq_len(nrow(runs)), interaction(runs[key], drop = TRUE))
+  cells <- do.call(rbind, lapply(groups, function(i) {
+    x <- runs[i, ]; good <- valid[i]; k <- sum(x$bray_pass); n <- nrow(x)
+    ci <- pt_wilson(k, n, confidence)
+    # This experiment reuses its deterministic baseline at the origin.
+    if (x$GrowthError[1] == 0 && x$CovarianceError[1] == 0 &&
+        all(good) && all(abs(x$bray) <= 1e-10)) ci <- c(lower=1,upper=1)
+    data.frame(x[1,key], n=n, valid=sum(good), unavailable=sum(!good),
+      bray_tolerance=bray_tolerance, required_success=required_success, confidence=confidence,
+      within_rate=k/n, within_lower=ci[1], within_upper=ci[2],
+      exceedances=sum(good & !x$bray_pass),
+      exceed_rate_valid=if (any(good)) sum(good & !x$bray_pass)/sum(good) else NA_real_,
+      not_within_or_unavailable_rate=1-k/n,
+      estimated_meets_tolerance=k/n >= required_success,
+      supported_meets_tolerance=ci[1] >= required_success)
+  }))
+  rownames(cells) <- NULL
+  if (nrow(cells) != length(types)*length(growth_levels)*length(covariance_levels))
+    stop("A complete rectangular grid per portfolio type is required for frontier calculation.")
+  # All lower-error cells must pass: do not select isolated high-error successes.
+  limit <- function(type, fixed, axis, column) {
+    levels <- if (axis == "GrowthError") growth_levels else covariance_levels
+    ok <- vapply(levels, function(level) {
+      ge <- if (axis == "GrowthError") level else fixed
+      ce <- if (axis == "GrowthError") fixed else level
+      z <- cells[cells$PortfolioType == type & cells$GrowthError <= ge & cells$CovarianceError <= ce, ]
+      all(z[[column]])
+    }, logical(1))
+    if (any(ok)) max(levels[ok]) else NA_real_
+  }
+  growth_frontier <- do.call(rbind, lapply(types, function(type) do.call(rbind, lapply(covariance_levels, function(ce)
+    data.frame(PortfolioType=type, CovarianceErrorUpTo=ce,
+      GrowthErrorUpTo_estimate=limit(type,ce,"GrowthError","estimated_meets_tolerance"),
+      GrowthErrorUpTo_supported=limit(type,ce,"GrowthError","supported_meets_tolerance"))))))
+  covariance_frontier <- do.call(rbind, lapply(types, function(type) do.call(rbind, lapply(growth_levels, function(ge)
+    data.frame(PortfolioType=type, GrowthErrorUpTo=ge,
+      CovarianceErrorUpTo_estimate=limit(type,ge,"CovarianceError","estimated_meets_tolerance"),
+      CovarianceErrorUpTo_supported=limit(type,ge,"CovarianceError","supported_meets_tolerance"))))))
+  axis_limits <- merge(growth_frontier[growth_frontier$CovarianceErrorUpTo==0,
+    c("PortfolioType","GrowthErrorUpTo_estimate","GrowthErrorUpTo_supported")],
+    covariance_frontier[covariance_frontier$GrowthErrorUpTo==0,
+    c("PortfolioType","CovarianceErrorUpTo_estimate","CovarianceErrorUpTo_supported")], by="PortfolioType")
+  if (!is.null(output_dir)) {
+    filenames <- c("bray_cell_summary.csv", "bray_tolerance_frontier.csv", "bray_covariance_frontier.csv", "bray_axis_limits.csv", "bray_README.txt")
+    if (any(file.exists(file.path(output_dir,filenames)))) stop("Bray outputs already exist; choose a new output directory.")
+    dir.create(output_dir, recursive=TRUE, showWarnings=FALSE)
+    tables <- list(cells, growth_frontier, covariance_frontier, axis_limits)
+    for (j in seq_along(tables)) write.csv(tables[[j]],file.path(output_dir,filenames[j]),row.names=FALSE)
+    writeLines(c(
+      paste("Bray-Curtis tolerance:",bray_tolerance,"; required within-tolerance probability:",required_success),
+      paste("Pointwise Wilson confidence level:",confidence),
+      "Within-rate uses all attempts. Failed/missing portfolios count as not within tolerance, not measured exceedances.",
+      "exceed_rate_valid describes only successfully measured portfolios; unavailable counts are separate.",
+      "Frontiers require every tested cell in the rectangle from zero to pass. No interpolation is performed.",
+      "Axis limits hold the OTHER input error at zero; their two maxima are not necessarily jointly acceptable.",
+      "NA means no qualifying rectangle. A limit at the largest tested level is a lower bound on tolerance; expand the grid.",
+      "Supported limits use pointwise lower confidence bounds, not simultaneous coverage over the grid.",
+      "GrowthError is species-mean error SD relative to its configured scale; CovarianceError retains the source run's mode and units.",
+      "This allocation criterion is separate from growth/risk performance criteria."
+    ),file.path(output_dir,"bray_README.txt"))
+  }
+  invisible(list(cell_summary=cells, tolerance_frontier=growth_frontier,
+                 covariance_frontier=covariance_frontier, axis_limits=axis_limits))
+}
+
 run_practical_tolerance <- function(
     returns, sigma2, growth_levels = seq(0, .20, .02),
     covariance_levels = seq(0, .20, .02), n_rep = 300, seed = 20261030,
     growth_loss_tolerance = .05, risk_increase_tolerance = .10,
-    required_success = .95, confidence = .95, fixed_target_fraction = .90,
+    required_success = .95, confidence = .95, return_fraction = .90,
     covariance_mode = c("both", "sd_only", "correlation_only"),
-    growth_error_scale = NULL,
-    output_dir = file.path(getwd(), paste0("PracticalTolerance_", format(Sys.time(), "%Y%m%d_%H%M%S")))) {
+    growth_error_scale = NULL, minTot = .01, optimisation_file = .pt_optimisation_file,
+    output_dir = file.path(getwd(), paste0("PracticalTolerance_", format(Sys.time(), "%Y%m%d_%H%M%S"))),
+    bray_tolerance = .10) {
+  stopifnot(length(bray_tolerance)==1, is.finite(bray_tolerance), bray_tolerance>=0, bray_tolerance<=1)
   covariance_mode <- match.arg(covariance_mode)
-  if (!requireNamespace("quadprog", quietly = TRUE) || !requireNamespace("Matrix", quietly = TRUE))
-    stop("Install packages quadprog and Matrix first.")
+  if (!all(vapply(c("data.table", "nloptr", "Matrix"), requireNamespace, logical(1), quietly = TRUE)))
+    stop("Install packages data.table, nloptr and Matrix first.")
+  # The original source uses unqualified data.table and nloptr functions.
+  suppressPackageStartupMessages(library(data.table))
+  suppressPackageStartupMessages(library(nloptr))
+  if (!file.exists(optimisation_file)) stop("Cannot find optimisation.R; supply optimisation_file explicitly.")
+  optimiser_env <- new.env(parent = globalenv())
+  sys.source(optimisation_file, envir = optimiser_env)
+  if (!exists("optimise_portfolio", envir = optimiser_env, inherits = FALSE))
+    stop("optimisation.R does not define optimise_portfolio()")
+  optimiser <- optimiser_env$optimise_portfolio
   X <- as.matrix(returns); S <- as.matrix(sigma2)
   if (!is.numeric(X) || ncol(X) < 2 || nrow(X) < 1 || any(!is.finite(X)))
     stop("returns must contain finite numeric species columns only.")
@@ -105,7 +225,7 @@ run_practical_tolerance <- function(
   if (max(abs(S-t(S))) > 1e-10 * max(abs(S))) stop("Baseline sigma2 is asymmetric.")
   S <- (S+t(S))/2
   if (min(eigen(S, symmetric = TRUE, only.values = TRUE)$values) <= 0)
-    stop("Baseline sigma2 must be positive definite for QP optimisation; resolve its singularity explicitly.")
+    stop("Baseline sigma2 must be positive definite; resolve its singularity explicitly.")
   mu <- colMeans(X)
   if (is.null(growth_error_scale)) growth_error_scale <- abs(mu)
   if (!is.null(names(growth_error_scale))) {
@@ -127,11 +247,12 @@ run_practical_tolerance <- function(
             length(risk_increase_tolerance) == 1, is.finite(risk_increase_tolerance), risk_increase_tolerance >= 0,
             length(required_success) == 1, required_success > 0, required_success < 1,
             length(confidence) == 1, confidence > 0, confidence < 1,
-            length(fixed_target_fraction) == 1, fixed_target_fraction > 0, fixed_target_fraction <= 1)
-  target <- fixed_target_fraction * max(mu)
-  types <- c("MaxSharpe", "FixedGrowth", "MinVariance")
-  baselines <- setNames(lapply(types, function(type) pt_solve(mu, S, type, target)), types)
-  if (any(vapply(baselines, function(b) b$status != "ok", logical(1)))) stop("Baseline optimisation failed.")
+            length(return_fraction) == 1, return_fraction == .90,
+            length(minTot) == 1, is.finite(minTot), minTot >= 0, minTot < 1)
+  types <- c("MaxSharpe", "90%", "MinVariance")
+  baselines <- pt_select_frontier(X, S, optimiser, minTot, return_fraction)
+  if (any(vapply(baselines, function(b) b$status != "ok", logical(1))))
+    stop("Baseline optimisation failed: ", paste(vapply(baselines, function(b) b$message, character(1)), collapse = "; "))
   baseline <- do.call(rbind, lapply(types, function(type) {
     w <- baselines[[type]]$weights
     data.frame(PortfolioType = type, growth = sum(w*mu), risk = sqrt(drop(t(w)%*%S%*%w)))
@@ -144,7 +265,9 @@ run_practical_tolerance <- function(
   if (!dir.exists(output_dir)) stop("Could not create output_dir.")
   settings <- as.list(environment())[c("growth_levels", "covariance_levels", "n_rep", "seed",
     "growth_loss_tolerance", "risk_increase_tolerance", "required_success", "confidence",
-    "fixed_target_fraction", "target", "covariance_mode", "growth_error_scale")]
+    "return_fraction", "minTot", "optimisation_file", "covariance_mode", "growth_error_scale", "bray_tolerance")]
+  settings$optimiser_md5 <- unname(tools::md5sum(optimisation_file))
+  settings$selection <- "Original frontier: max sharpe, min frontier_sd, closest to 90% of per-run max return"
   saveRDS(list(returns = X, covariance = S, settings = settings, baselines = baselines),
           file.path(output_dir, "inputs_and_settings.rds"))
   write.csv(baseline, file.path(output_dir, "baseline_performance.csv"), row.names = FALSE)
@@ -158,16 +281,22 @@ run_practical_tolerance <- function(
     z_growth <- rnorm(length(spp)); z_sd <- rnorm(length(spp)); z_cor <- rnorm(choose(length(spp), 2))
     for (g in seq_len(nrow(grid))) {
       ge <- grid$GrowthError[g]; ce <- grid$CovarianceError[g]
-      estimated_mu <- mu + ge * growth_error_scale * z_growth
+      estimated_X <- sweep(X, 2, ge * growth_error_scale * z_growth, "+")
       cv <- tryCatch(pt_covariance(S, ce, z_sd, z_cor, covariance_mode), error = identity)
+      fits <- if (inherits(cv, "error")) setNames(lapply(types, function(type)
+        list(status = "covariance_failure", message = conditionMessage(cv))), types) else
+        if (ge == 0 && ce == 0) baselines else
+          pt_select_frontier(estimated_X, cv$S, optimiser, minTot, return_fraction)
       for (type in types) {
         counter <- counter + 1L
-        fit <- if (inherits(cv, "error")) list(status = "covariance_failure", message = conditionMessage(cv)) else
-          if (ge == 0 && ce == 0) baselines[[type]] else pt_solve(estimated_mu, cv$S, type, target)
+        fit <- fits[[type]]
         row <- data.frame(Replicate = replicate, PortfolioType = type, GrowthError = ge,
           CovarianceError = ce, status = fit$status, message = fit$message,
           growth = NA_real_, risk = NA_real_, growth_loss = NA_real_, risk_increase = NA_real_,
-          bray = NA_real_, target_shortfall = NA_real_, pass = FALSE,
+          bray = NA_real_, pass = FALSE,
+          frontier_row = NA_integer_, estimated_return = NA_real_, frontier_return = NA_real_,
+          frontier_max_return = NA_real_, frontier_sharpe = NA_real_,
+          target_return = NA_real_, target_gap = NA_real_,
           covariance_repair = if (inherits(cv, "error")) NA_real_ else cv$repair,
           covariance_relative_error = if (inherits(cv, "error")) NA_real_ else cv$relative_error,
           correlation_rmse = if (inherits(cv, "error")) NA_real_ else cv$correlation_rmse)
@@ -179,7 +308,8 @@ run_practical_tolerance <- function(
           row$growth_loss <- (b$growth - row$growth) / b$growth
           row$risk_increase <- (row$risk - b$risk) / b$risk
           row$bray <- sum(abs(weights - baselines[[type]]$weights)) / 2
-          row$target_shortfall <- if (type == "FixedGrowth") max(0, target-row$growth) else NA_real_
+          for (field in c("frontier_row", "estimated_return", "frontier_return", "frontier_max_return",
+                          "frontier_sharpe", "target_return", "target_gap")) row[[field]] <- fit[[field]]
           row$pass <- row$growth_loss <= growth_loss_tolerance + 1e-10 &&
                       row$risk_increase <= risk_increase_tolerance + 1e-10
         }
@@ -190,7 +320,10 @@ run_practical_tolerance <- function(
     if (replicate %% 10 == 0 || replicate == n_rep) message("Completed ", replicate, "/", n_rep, " replicates")
   }
   runs <- do.call(rbind, rows)
+  runs$bray_pass <- runs$status == "ok" & is.finite(runs$bray) &
+                    !is.na(runs$bray) & runs$bray <= bray_tolerance + 1e-10
   write.csv(runs, file.path(output_dir, "run_results.csv"), row.names = FALSE)
+  bray_results <- summarise_bray_tolerance(runs, bray_tolerance, required_success, confidence, output_dir)
   safe_mean <- function(x) if (all(is.na(x))) NA_real_ else mean(x, na.rm = TRUE)
   safe_q90 <- function(x) if (all(is.na(x))) NA_real_ else unname(quantile(x, .9, na.rm = TRUE))
   groups <- split(seq_len(nrow(runs)), interaction(runs$PortfolioType, runs$GrowthError, runs$CovarianceError))
@@ -204,8 +337,7 @@ run_practical_tolerance <- function(
     }
     interaction <- as.numeric(!x$pass) - control(x$GrowthError[1], 0) - control(0, x$CovarianceError[1]) + control(0,0)
     data.frame(x[1, c("PortfolioType", "GrowthError", "CovarianceError")], n = nrow(x),
-      valid = sum(x$status == "ok"), infeasible = sum(x$status == "infeasible_target"),
-      failures = sum(!x$status %in% c("ok", "infeasible_target")), success_rate = k/nrow(x),
+      valid = sum(x$status == "ok"), failures = sum(x$status != "ok"), success_rate = k/nrow(x),
       success_lower = ci[1], success_upper = ci[2],
       estimated_meets_tolerance = k/nrow(x) >= required_success,
       supported_meets_tolerance = ci[1] >= required_success,
@@ -238,12 +370,16 @@ run_practical_tolerance <- function(
     "NA means no qualifying rectangle; a bound at the grid maximum means expand the grid.",
     "Supported uses pointwise Wilson lower bounds, not simultaneous coverage or a precise threshold CI.",
     "Zero-noise results reuse the deterministic baseline; their probability is exactly 1 conditional on that baseline.",
-    "Failure and infeasible runs count as unsuccessful; metric quantiles exclude unavailable values.",
+    "Failed runs count as unsuccessful; metric quantiles exclude unavailable values.",
     "Positive failure_interaction means joint errors fail more often than the sum of individual effects.",
     "Interaction SE uses paired replicate contrasts. Grid cells are not independent.",
     "CovarianceError means SD-multiplier CV and/or pre-projection correlation-error SD, depending on mode.",
     "Realised covariance errors and repairs are reported separately. Units differ from growth-error fractions.",
-    "Success concerns growth/risk relative to matching baseline portfolios; fixed-target shortfall is also recorded.",
+    "Success concerns growth/risk relative to matching baseline portfolios, using sqrt(w' S w) for risk.",
+    "Optimisation uses optimisation.R unchanged, including its species removal and variance-based Sharpe score.",
+    "90% selects the nearest frontier row to 0.9 times that run's maximum reported return; ties select the first row.",
+    "target_return changes per run; target_gap is achieved estimated return minus that target (grid approximation).",
+    "The original optimiser does not expose convergence codes; returned weights and achieved returns are checked.",
     "Results assume the baseline is correct and the specified error distribution is appropriate.",
     "Use independent validation simulations at a chosen boundary before making an accuracy requirement."
   ), file.path(output_dir, "README.txt"))
@@ -266,5 +402,6 @@ run_practical_tolerance <- function(
   }
   message("Saved results to ", normalizePath(output_dir))
   invisible(list(runs = runs, summary = summary, tolerance_frontier = frontier,
+                 bray = bray_results,
                  baseline = baseline, settings = settings, output_dir = output_dir))
 }
