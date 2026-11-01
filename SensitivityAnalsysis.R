@@ -80,7 +80,7 @@ ggplot(ef_long, aes(x = frontier_sd, y = value)) +
 
 
 
-#######################Run Sensivity Analysis######################
+#######################Run Sensitivity Analysis######################
 source("PracticalToleranceAnalysis_whm.R")
 result <- run_practical_tolerance(
   returns, sigma2,
@@ -95,6 +95,9 @@ result <- run_practical_tolerance(
   
   covariance_mode = "correlation_only",
   n_rep = 50,
+  bray_tolerance = .10,
+  aitchison_tolerance = 1.0,
+  weighted_shift_tolerance = 0.05,
   
   growth_loss_tolerance = .10,
   risk_increase_tolerance = .10,
@@ -102,10 +105,323 @@ result <- run_practical_tolerance(
   confidence = .95
 )
 
-result$bray$axis_limits
-result$summary
+acceptable <-
+  subset(
+    result$runs,
+    overall_pass
+  )
+weight_cols <-
+  grep("^weight_", names(acceptable),
+       value = TRUE)
 
+envelope <- do.call(
+  rbind,
+  lapply(weight_cols, function(w){
+    
+    data.frame(
+      Species =
+        sub("weight_","",w),
+      
+      Mean =
+        mean(acceptable[[w]], na.rm=TRUE),
+      
+      Min =
+        min(acceptable[[w]], na.rm=TRUE),
+      
+      Max =
+        max(acceptable[[w]], na.rm=TRUE),
+      
+      P05 =
+        quantile(acceptable[[w]], .05, na.rm=TRUE),
+      
+      P95 =
+        quantile(acceptable[[w]], .95, na.rm=TRUE)
+    )
+  })
+)
+ggplot(
+  envelope,
+  aes(
+    x = Species,
+    y = Mean
+  )
+) +
+  geom_pointrange(
+    aes(
+      ymin = P05,
+      ymax = P95
+    ),
+    size = 1
+  ) +
+  geom_errorbar(
+    aes(
+      ymin = Min,
+      ymax = Max
+    ),
+    alpha = .3,
+    width = .2
+  ) +
+  coord_flip()
 
+#####
+# How much can site index/correlation estimates be wrong?
+#   Which species allocations remain acceptable?
+#   How much does the efficient frontier move?
+################
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(patchwork)
+
+allocation_envelope <-
+  
+  acceptable %>%
+  
+  pivot_longer(
+    cols = all_of(weight_cols),
+    names_to  = "Species",
+    values_to = "Weight"
+  ) %>%
+  
+  mutate(
+    Species =
+      sub("^weight_", "", Species)
+  ) %>%
+  
+  group_by(
+    PortfolioType,
+    Species
+  ) %>%
+  
+  summarise(
+    
+    Mean =
+      mean(Weight, na.rm = TRUE),
+    
+    P05 =
+      quantile(
+        Weight,
+        .05,
+        na.rm = TRUE
+      ),
+    
+    P50 =
+      quantile(
+        Weight,
+        .50,
+        na.rm = TRUE
+      ),
+    
+    P95 =
+      quantile(
+        Weight,
+        .95,
+        na.rm = TRUE
+      ),
+    
+    .groups = "drop"
+  )
+
+baseline_df <-
+  
+  result$runs %>%
+  
+  filter(
+    GrowthError == 0,
+    CovarianceError == 0
+  ) %>%
+  
+  group_by(
+    PortfolioType
+  ) %>%
+  
+  slice(1) %>%
+  
+  ungroup() %>%
+  
+  select(
+    PortfolioType,
+    starts_with("weight_")
+  ) %>%
+  
+  pivot_longer(
+    starts_with("weight_"),
+    names_to = "Species",
+    values_to = "Baseline"
+  ) %>%
+  
+  mutate(
+    Species =
+      sub(
+        "^weight_",
+        "",
+        Species
+      )
+  )
+
+allocation_envelope <-
+  
+  allocation_envelope %>%
+  
+  left_join(
+    baseline_df,
+    by = c(
+      "PortfolioType",
+      "Species"
+    )
+  )
+
+p1 <-
+  
+  ggplot(
+    subset(
+      allocation_envelope,
+      PortfolioType == "MaxSharpe"
+    ),
+    aes(
+      Species,
+      P50
+    )
+  ) +
+  
+  geom_errorbar(
+    aes(
+      ymin = P05,
+      ymax = P95
+    ),
+    width = 0.2,
+    linewidth = 1
+  ) +
+  
+  geom_point(
+    size = 3
+  ) +
+  
+  geom_point(
+    aes(
+      y = Baseline
+    ),
+    colour = "red",
+    size = 4
+  ) +
+  
+  coord_flip() +
+  
+  labs(
+    title =
+      "MaxSharpe Stability Envelope",
+    y =
+      "Species Allocation",
+    x = NULL
+  )
+
+p2 <-
+  ggplot(
+    subset(
+      allocation_envelope,
+      PortfolioType == "90%"
+    ),
+    aes(
+      Species,
+      P50
+    )
+  ) +
+  
+  geom_errorbar(
+    aes(
+      ymin = P05,
+      ymax = P95
+    ),
+    width = 0.2,
+    linewidth = 1
+  ) +
+  
+  geom_point(
+    size = 3
+  ) +
+  
+  geom_point(
+    aes(
+      y = Baseline
+    ),
+    colour = "red",
+    size = 4
+  ) +
+  
+  coord_flip() +
+  
+  labs(
+    title =
+      "90% Return Stability Envelope",
+    y =
+      "Species Allocation",
+    x = NULL
+  )
+
+risk_return <-
+  
+  result$runs %>%
+  
+  filter(
+    overall_pass,
+    PortfolioType %in%
+      c("MaxSharpe","90%")
+  )
+
+baseline_pts <-
+  
+  data.frame(
+    
+    PortfolioType =
+      result$baseline$PortfolioType,
+    
+    risk =
+      result$baseline$risk,
+    
+    growth =
+      result$baseline$growth
+  )
+
+p3 <-
+  
+  ggplot(
+    risk_return,
+    aes(
+      risk,
+      growth,
+      colour = PortfolioType
+    )
+  ) +
+  
+  geom_point(
+    alpha = 0.25
+  ) +
+  
+  geom_point(
+    data = baseline_pts,
+    aes(
+      risk,
+      growth
+    ),
+    inherit.aes = FALSE,
+    colour = "red",
+    size = 5
+  ) +
+  
+  labs(
+    title =
+      "Acceptable Portfolio Cloud",
+    x = "Risk",
+    y = "Growth"
+  )
+
+final_plot <-
+  
+  (p1 | p2) /
+  p3
+
+final_plot
 ###OLD CODE####
 # Add Gaussian noise once per unique covariance entry, then project to a
 # positive-definite matrix by flooring eigenvalues. CovNoise/20 remains the

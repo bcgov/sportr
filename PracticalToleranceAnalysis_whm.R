@@ -135,9 +135,14 @@ aitchison_distance <- function(
 
 # Can also analyse an existing result$runs or read.csv(".../run_results.csv")
 # without rerunning optimisation. Limits apply only to tested grid points.
-summarise_bray_tolerance <- function(runs, bray_tolerance = .10,
-                                    required_success = .90, confidence = .95,
-                                    output_dir = NULL) {
+summarise_bray_tolerance <- function(
+    runs,
+    bray_tolerance = .10,
+    required_success = .90,
+    confidence = .95,
+    output_dir = NULL,
+    validate_bounds = TRUE
+) {
   stopifnot(length(bray_tolerance) == 1, is.finite(bray_tolerance),
             bray_tolerance >= 0, bray_tolerance <= 1,
             length(required_success) == 1, required_success > 0, required_success < 1,
@@ -151,7 +156,15 @@ summarise_bray_tolerance <- function(runs, bray_tolerance = .10,
   if (any(!is.finite(runs$GrowthError)) || any(!is.finite(runs$CovarianceError)) ||
       any(runs$GrowthError < 0) || any(runs$CovarianceError < 0)) stop("Invalid error levels.")
   valid <- runs$status == "ok" & is.finite(runs$bray)
-  if (any(runs$bray[valid] < -1e-10 | runs$bray[valid] > 1+1e-10)) stop("Invalid Bray-Curtis distance.")
+  if (validate_bounds) {
+    
+    if (any(
+      runs$bray[valid] < -1e-10 |
+      runs$bray[valid] > 1 + 1e-10
+    ))
+      stop("Invalid Bray-Curtis distance.")
+    
+  }
   runs$bray_pass <- valid & !is.na(runs$bray) & runs$bray <= bray_tolerance + 1e-10
   
   types <- unique(runs$PortfolioType)
@@ -224,7 +237,11 @@ summarise_bray_tolerance <- function(runs, bray_tolerance = .10,
 summarise_metric_tolerance <- function(
     runs,
     tolerance,
-    metric = c("bray","aitchison", "weighted_shift"),
+    metric = c(
+      "bray",
+      "aitchison",
+      "weighted_shift"
+    ),
     required_success = .90,
     confidence = .95,
     output_dir = NULL
@@ -240,7 +257,8 @@ summarise_metric_tolerance <- function(
     bray_tolerance = tolerance,
     required_success = required_success,
     confidence = confidence,
-    output_dir = output_dir
+    output_dir = output_dir,
+    validate_bounds = (metric == "bray")
   )
 }
 create_species_tolerance_table <- function(
@@ -278,6 +296,34 @@ create_species_tolerance_table <- function(
   )
 }
 
+# returns =returns
+# sigma2 = sigma2
+# growth_levels = c(
+#   seq(0, 0.1, length.out = 11)
+# )
+# 
+# covariance_levels = c(
+#   seq(0, 0.15, length.out = 11)
+# )
+# 
+# covariance_mode = "correlation_only"
+# n_rep = 50
+# 
+# growth_loss_tolerance = .10
+# risk_increase_tolerance = .10
+# required_success = .90
+# confidence = .95
+# bray_tolerance = .10; aitchison_tolerance = 0.5; weighted_shift_tolerance = 0.05
+# optimisation_file = .pt_optimisation_file
+# growth_levels = seq(0, .20, .02);
+# covariance_levels = seq(0, .20, .02); n_rep = 10; seed = 20261030;
+# bray_tolerance = .10; aitchison_tolerance = 0.5; weighted_shift_tolerance = 0.05;
+# growth_loss_tolerance = .05; risk_increase_tolerance = .10;
+# required_success = .95; confidence = .95; return_fraction = .90;
+# 
+# growth_error_scale = NULL; minTot = .01; optimisation_file = .pt_optimisation_file;
+# output_dir = file.path(getwd(), paste0("PracticalTolerance_", format(Sys.time(), "%Y%m%d_%H%M%S")))
+
 run_practical_tolerance <- function(
     returns, sigma2, growth_levels = seq(0, .20, .02),
     covariance_levels = seq(0, .20, .02), n_rep = 300, seed = 20261030,
@@ -306,6 +352,7 @@ run_practical_tolerance <- function(
   {
     stop("Install openxlsx")
   }
+ 
   covariance_mode <- match.arg(covariance_mode)
   if (!all(vapply(c("data.table", "nloptr", "Matrix"), requireNamespace, logical(1), quietly = TRUE)))
     stop("Install packages data.table, nloptr and Matrix first.")
@@ -333,7 +380,11 @@ run_practical_tolerance <- function(
   if (min(eigen(S, symmetric = TRUE, only.values = TRUE)$values) <= 0)
     stop("Baseline sigma2 must be positive definite; resolve its singularity explicitly.")
   mu <- colMeans(X)
-  
+  names(mu) <- spp
+  if (is.null(growth_error_scale))
+    growth_error_scale <- abs(mu)
+  if (is.null(names(growth_error_scale)))
+    names(growth_error_scale) <- spp
   ############################################################
   # INTERPRETABLE GROWTH ERROR TABLE
   ############################################################
@@ -383,7 +434,7 @@ run_practical_tolerance <- function(
             length(confidence) == 1, confidence > 0, confidence < 1,
             length(return_fraction) == 1, return_fraction == .90,
             length(minTot) == 1, is.finite(minTot), minTot >= 0, minTot < 1)
-  types <- c("MaxSharpe", "90%", "MinVariance")
+  types <- c("MaxSharpe", "90%")
   baselines <- pt_select_frontier(X, S, optimiser, minTot, return_fraction)
   if (any(vapply(baselines, function(b) b$status != "ok", logical(1))))
     stop("Baseline optimisation failed: ", paste(vapply(baselines, function(b) b$message, character(1)), collapse = "; "))
@@ -405,7 +456,7 @@ run_practical_tolerance <- function(
   settings$selection <- "Original frontier: max sharpe, min frontier_sd, closest to 90% of per-run max return"
   saveRDS(list(returns = X, covariance = S, settings = settings, baselines = baselines),
           file.path(output_dir, "inputs_and_settings.rds"))
-  write.csv(baseline, file.path(output_dir, "baseline_performance.csv"), row.names = FALSE)
+  #write.csv(baseline, file.path(output_dir, "baseline_performance.csv"), row.names = FALSE)
   capture.output(sessionInfo(), file = file.path(output_dir, "sessionInfo.txt"))
   # Common random draws across grid levels allow paired interaction comparisons.
   # Replicates remain independent. The baseline is fixed, not posterior uncertainty.
@@ -480,7 +531,22 @@ run_practical_tolerance <- function(
   runs <- do.call(rbind, rows)
   runs$bray_pass <- runs$status == "ok" & is.finite(runs$bray) &
                     !is.na(runs$bray) & runs$bray <= bray_tolerance + 1e-10
-  write.csv(runs, file.path(output_dir, "run_results.csv"), row.names = FALSE)
+  runs$aitchison_pass <- runs$status == "ok" &
+    is.finite(runs$aitchison) &
+    !is.na(runs$aitchison) &
+    runs$aitchison <= aitchison_tolerance + 1e-10
+  
+  runs$weighted_shift_pass <- runs$status == "ok" &
+    is.finite(runs$weighted_shift) &
+    !is.na(runs$weighted_shift) &
+    runs$weighted_shift <= weighted_shift_tolerance + 1e-10
+  runs$overall_pass <-
+    runs$pass &
+    runs$bray_pass &
+    runs$aitchison_pass &
+    runs$weighted_shift_pass
+  
+  #write.csv(runs, file.path(output_dir, "run_results.csv"), row.names = FALSE)
   bray_results <-
     summarise_metric_tolerance(
       runs = runs,
@@ -591,18 +657,64 @@ run_practical_tolerance <- function(
     )
   )
   
+  bray_results$axis_limits$Metric <- "Bray"
+  aitchison_results$axis_limits$Metric <- "Aitchison"
+  weighted_shift_results$axis_limits$Metric <- "WeightedShift"
+  
+  metric_axis_limits <- rbind(
+    bray_results$axis_limits,
+    aitchison_results$axis_limits,
+    weighted_shift_results$axis_limits
+  )
+  
   library(openxlsx)
   
   wb <- createWorkbook()
+  # addWorksheet(
+  #   wb,
+  #   "Baseline"
+  # )
+  # 
+  # writeData(
+  #   wb,
+  #   "Baseline",
+  #   baseline
+  # )
+  README <- data.frame(
+    Parameter = names(settings),
+    Value = vapply(
+      settings,
+      function(x)
+        paste(capture.output(print(x)),
+              collapse = " "),
+      character(1)
+    )
+  )
+  README <- rbind(
+    README,
+    data.frame(
+      Parameter = c(
+        "Bray",
+        "Aitchison",
+        "WeightedShift"
+      ),
+      Value = c(
+        "Proportional portfolio allocation shift",
+        "CLR-space compositional distance",
+        "Baseline-weighted allocation shift"
+      )
+    )
+  )
+  
   addWorksheet(
     wb,
-    "Baseline"
+    "README"
   )
   
   writeData(
     wb,
-    "Baseline",
-    baseline
+    "README",
+    README
   )
   addWorksheet(
     wb,
@@ -614,48 +726,48 @@ run_practical_tolerance <- function(
     "Runs",
     runs
   )
-  addWorksheet(
-    wb,
-    "Bray_Frontier"
-  )
-  
-  writeData(
-    wb,
-    "Bray_Frontier",
-    bray_results$tolerance_frontier
-  )
-  
-  addWorksheet(
-    wb,
-    "Bray_AxisLimits"
-  )
-  
-  writeData(
-    wb,
-    "Bray_AxisLimits",
-    bray_results$axis_limits
-  )
-  addWorksheet(
-    wb,
-    "Aitchison_Frontier"
-  )
-  
-  writeData(
-    wb,
-    "Aitchison_Frontier",
-    aitchison_results$tolerance_frontier
-  )
-  
-  addWorksheet(
-    wb,
-    "Aitchison_AxisLimits"
-  )
-  
-  writeData(
-    wb,
-    "Aitchison_AxisLimits",
-    aitchison_results$axis_limits
-  )
+  # addWorksheet(
+  #   wb,
+  #   "Bray_Frontier"
+  # )
+  # 
+  # writeData(
+  #   wb,
+  #   "Bray_Frontier",
+  #   bray_results$tolerance_frontier
+  # )
+  # 
+  # addWorksheet(
+  #   wb,
+  #   "Bray_AxisLimits"
+  # )
+  # 
+  # writeData(
+  #   wb,
+  #   "Bray_AxisLimits",
+  #   bray_results$axis_limits
+  # )
+  # addWorksheet(
+  #   wb,
+  #   "Aitchison_Frontier"
+  # )
+  # 
+  # writeData(
+  #   wb,
+  #   "Aitchison_Frontier",
+  #   aitchison_results$tolerance_frontier
+  # )
+  # 
+  # addWorksheet(
+  #   wb,
+  #   "Aitchison_AxisLimits"
+  # )
+  # 
+  # writeData(
+  #   wb,
+  #   "Aitchison_AxisLimits",
+  #   aitchison_results$axis_limits
+  # )
   addWorksheet(
     wb,
     "SpeciesTolerance"
@@ -681,84 +793,74 @@ run_practical_tolerance <- function(
     "PerformanceSummary"
   )
   
-  writeData(
-    wb,
-    "PerformanceSummary",
-    summary
-  )
-  addWorksheet(
-    wb,
-    "Bray_CellSummary"
-  )
-  
-  writeData(
-    wb,
-    "Bray_CellSummary",
-    bray_results$cell_summary
-  )
-  
-  addWorksheet(
-    wb,
-    "Aitchison_CellSummary"
-  )
-  
-  writeData(
-    wb,
-    "Aitchison_CellSummary",
-    aitchison_results$cell_summary
-  )
-  addWorksheet(
-    wb,
-    "WeightedShift_CellSummary"
-  )
-  
-  writeData(
-    wb,
-    "WeightedShift_CellSummary",
-    weighted_shift_results$cell_summary
-  )
-  
-  addWorksheet(
-    wb,
-    "SessionInfo"
-  )
-  addWorksheet(
-    wb,
-    "WeightedShift_AxisLimits"
-  )
-  
-  writeData(
-    wb,
-    "WeightedShift_AxisLimits",
-    weighted_shift_results$axis_limits
-  )
-  writeData(
-    wb,
-    "SessionInfo",
-    paste(
-      capture.output(sessionInfo()),
-      collapse="\n"
-    )
-  )
-  README <- data.frame(
-    Notes = c(
-      "Bray = proportional allocation shift",
-      "Aitchison = compositional distance",
-      "SpeciesTolerance converts allowable uncertainty into meters",
-      "Error95_m is approximately ±95% uncertainty"
-    )
-  )
-  
-  addWorksheet(
-    wb,
-    "README"
-  )
-  
-  writeData(
-    wb,
-    "README",
-    README
-  )
+  # writeData(
+  #   wb,
+  #   "PerformanceSummary",
+  #   summary
+  # )
+  # addWorksheet(
+  #   wb,
+  #   "Bray_CellSummary"
+  # )
+  # 
+  # writeData(
+  #   wb,
+  #   "Bray_CellSummary",
+  #   bray_results$cell_summary
+  # )
+  # 
+  # addWorksheet(
+  #   wb,
+  #   "Aitchison_CellSummary"
+  # )
+  # 
+  # writeData(
+  #   wb,
+  #   "Aitchison_CellSummary",
+  #   aitchison_results$cell_summary
+  # )
+  # addWorksheet(
+  #   wb,
+  #   "WeightedShift_CellSummary"
+  # )
+  # 
+  # writeData(
+  #   wb,
+  #   "WeightedShift_CellSummary",
+  #   weighted_shift_results$cell_summary
+  # )
+  # 
+  # addWorksheet(
+  #   wb,
+  #   "SessionInfo"
+  # )
+  # addWorksheet(
+  #   wb,
+  #   "WeightedShift_AxisLimits"
+  # )
+  # 
+  # writeData(
+  #   wb,
+  #   "WeightedShift_AxisLimits",
+  #   weighted_shift_results$axis_limits
+  # )
+  # writeData(
+  #   wb,
+  #   "SessionInfo",
+  #   paste(
+  #     capture.output(sessionInfo()),
+  #     collapse="\n"
+  #   )
+  # )
+  # README <- data.frame(
+  #   Notes = c(
+  #     "Bray = proportional allocation shift",
+  #     "Aitchison = compositional distance",
+  #     "SpeciesTolerance converts allowable uncertainty into meters",
+  #     "Error95_m is approximately ±95% uncertainty"
+  #   )
+  # )
+ 
   
   saveWorkbook(
     wb,
