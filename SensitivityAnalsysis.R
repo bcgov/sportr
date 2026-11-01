@@ -82,8 +82,10 @@ ggplot(ef_long, aes(x = frontier_sd, y = value)) +
 
 #######################Run Sensivity Analysis######################
 source("PracticalToleranceAnalysis.R")
+sigma3 <- cov(returns)
+
 result <- run_practical_tolerance(
-  returns, sigma2,
+  returns, sigma3,
   
   growth_levels = c(
      seq(0, 0.1, length.out = 11)
