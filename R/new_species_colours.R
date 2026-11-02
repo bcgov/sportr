@@ -6,19 +6,19 @@ species_cols <- ccissr::TreeCols |> mutate(Species = as.factor(TreeCode))
   species_cols <- c(
     
     # Dry Temperate
-    Fd  = "#F28E2B",
-    Fdc = "#E17C05",
-    Fdi = "#C76A00",
-    Lw  = "#A6611A",
-    Py  = "#FDB863",
-    Bg =  "#A6D96A",
-   
+    # Dry Temperate
+    Fd  = "#FFD54F",  # Douglas-fir (golden yellow)
+    Fdc = "#E8A317",  # coastal Douglas-fir
+    Fdi = "#F6C141",  # interior Douglas-fir
+    Lw =  "#D4E157", # balanced yellow-green
+    Py  = "#FFD166",
+    Bg  = "#AFCF5A",
     
     # Boreal
-    Pl  = "#E7298A",  # lodgepole pine
-    Plc = "#CE1256",  # coastal lodgepole pine
-    Pli = "#F768A1",  # interior lodgepole pine
-    Pj  = "#FBB4D8",  # jack pine
+    Pl  = "#00A6A6",
+    Plc = "#008585",
+    Pli = "#00A6A6",
+    Pj  = "#66CCCC" , # jack pine
 
     Sx  = "#3182BD",
     Sw  = "#6BAED6",
@@ -28,35 +28,37 @@ species_cols <- ccissr::TreeCols |> mutate(Species = as.factor(TreeCode))
     Sb  = "#08306B",
     
     # ESSF affiliates
-    Bl = "#88419D",  # dark purple
+    Bl = "#8073AC",   # dark purple
     Pa = "#B39DDB",  # light purple
     
     # MH affiliates
     Ba = "#6A51A3",  # amabilis fir
     Bp = "#9E9AC8",  # paper birch? (or your Bp code)
-    Hm = "#8073AC",  # mountain hemlock
+    Hm = "#88419D",  # mountain hemlock
     Yc = "#542788" ,  # yellow cedar
+
     
     # CWH/ICH
     Cw  = "#006D2C",
     Hw  = "#31A354",
 
 
-    # Interior or Provincial Broadleaf Species
-    # Interior broadleafs
-    At = "#D8C3A5",
-    Ep = "#CDB79E",
-    Ea = "#BCAAA4",
+    # Interior Broadleafs
+    At = "#E6D5B8",  # aspen
+    Ep = "#DCC9A8",  # cottonwood
+    Ea = "#CBBBAF",  # birch
     
     # Alders
-    Ac  = "#B08968",
-    Act = "#C2A878",
-    Acb = "#8D6E63",
-    # Coastal broadleafs
-    Mb = "#8C6D62",
-    Ra = "#7F5539",
-    Qg = "#D6C6A5",
-    Dr = "#A1887F",
+    Ac  = "#C89F72",
+    Act = "#D6BC8C",
+    Acb = "#A98274",
+    
+    # Coastal Broadleafs
+    Mb = "#7A5C52",  # bigleaf maple
+    Ra = "#5E3C2B",  # arbutus
+    Qg = "#A67C52",  # garry oak
+    Dr = "#8B6F63",   # red alder
+    
     
     # Other
     X   = "#999999"
