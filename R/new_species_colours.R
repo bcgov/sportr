@@ -11,7 +11,7 @@ species_cols <- ccissr::TreeCols |> mutate(Species = as.factor(TreeCode))
     Fdc = "#E8A317",  # coastal Douglas-fir
     Fdi = "#F6C141",  # interior Douglas-fir
     Lw =  "#D4E157", # balanced yellow-green
-    Py  = "#FFD166",
+    Py = "#FFECB3",
     Bg  = "#AFCF5A",
     
     # Boreal
@@ -64,8 +64,9 @@ species_cols <- ccissr::TreeCols |> mutate(Species = as.factor(TreeCode))
     X   = "#999999"
   ) |> as.data.frame() |> rownames_to_column("TreeCode") |> rename("HexColour" = 2)
 fwrite(species_cols, "./new_species_colours.csv")
-
-ggplot(species_cols,
+compare = c("Fd", "Py")
+species_cols2 <- species_cols |> filter(TreeCode %in% compare)
+ggplot(species_cols2,
        aes(x = TreeCode, y = 1, fill = HexColour)) +
   geom_tile() +
   scale_fill_identity() +
