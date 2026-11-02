@@ -5,6 +5,8 @@ library(data.table)
 library(ggplot2)
 
 ##SIBayes models
+source("./R/get_species_colours.R")
+
 source("../SIBayes/draw_si_sigmoid.R")
 run_dir <- "../SIBayes/si_fits_quadratic_sigmoid/run_5fb023e0188b/"
 
@@ -16,11 +18,11 @@ fit_sigmoid <- list(
 current_unit <- "ICHdw1/101"
 location <- data.table(lat =  49.10443,	lon = -117.78877, elev =	1088, id = 1)
 
-current_unit <- "SBSmc2/01"
-location <- data.table(lat =  54.7797,	lon = -126.91428, elev =	896, id = 1)
-
-current_unit <- "IDFxh1/101"
-location <- data.table(lat =  50.23796,	lon = -119.22145, elev =	484, id = 1)
+# current_unit <- "SBSmc2/01"
+# location <- data.table(lat =  54.7797,	lon = -126.91428, elev =	896, id = 1)
+# 
+# current_unit <- "IDFxh1/101"
+# location <- data.table(lat =  50.23796,	lon = -119.22145, elev =	484, id = 1)
 
 get_clim <- function(location, years = 2015:2099){
   clim_dat <- downscale(location, gcms = list_gcms(), gcm_ssp_years = years, 
@@ -61,8 +63,8 @@ trajectory <- copy(conditions)
 #trajectory[, SI := as.numeric(si[1, ])]
 trajectory[, SI := as.numeric(si)]
 
-setorder(trajectory, species, PERIOD)
-#t2 <- trajectory[,.(SI_stand = SI - mean(SI[1:10]), PERIOD = PERIOD), by = species]
+# setorder(trajectory, species, PERIOD)
+# t2 <- trajectory[,.(SI_stand = SI - mean(SI[1:10]), PERIOD = PERIOD), by = species]
 
 temp <- dcast(trajectory, PERIOD ~ species, value.var = "SI")
 setorder(temp, PERIOD)
@@ -72,20 +74,23 @@ covmat <- cor(temp)
 suit <- copy(ccissr::S1)
 suit <- suit[spp %in% c("Fd", "Pl", "Lw", "Py", "At", "Cw", "Hw"),]
 suit <- unique(suit)
+spp_clrs <- get_species_colours(unique(suit$spp))
+
 smat <- dcast(suit, ss_nospace ~ spp, value.var = "newfeas", fun.aggregate = mean)
 num_cols <- names(smat)[sapply(smat, is.numeric)]
 setnafill(smat, fill = 5, cols = num_cols)
 smat[,ss_nospace := NULL]
 
-# R <- cor(
-#   smat,
-#   method = "spearman"
-# )
+R <- cor(
+  smat,
+  method = "spearman"
+)
 library(psych)
 
 R <- polychoric(
   smat
 )$rho
+
 sd_vec <- apply(
   smat,
   2,
@@ -99,14 +104,14 @@ sigma2 <- diag(sd_vec) %*%
 rownames(sigma2) <- names(smat)
 colnames(sigma2) <- names(smat)
 
-trajectory[,PERIOD := as.numeric(PERIOD)]
-ggplot(trajectory, aes(x = PERIOD, y = SI, group = species, col = species)) +
-  geom_line() +
-  geom_smooth()
-
-ggplot(t2, aes(x = PERIOD, y = SI_stand, group = species, col = species)) +
-  geom_line() +
-  geom_smooth()
+# trajectory[,PERIOD := as.numeric(PERIOD)]
+# ggplot(trajectory, aes(x = PERIOD, y = SI, group = species, col = species)) +
+#   geom_line() +
+#   geom_smooth()
+# 
+# ggplot(t2, aes(x = PERIOD, y = SI_stand, group = species, col = species)) +
+#   geom_line() +
+#   geom_smooth()
 
 ## SI based portfolio
 boundDat <- data.table(Spp = names(temp))
@@ -120,6 +125,7 @@ ggplot(ef_long, aes(x = frontier_sd, y = value)) +
   geom_area(aes(fill = variable, group = variable), size = 0.00001, col = "grey50", stat = "identity")+
   geom_line(data = ef, aes(x = frontier_sd, y = return/max(return)), colour = "black", linetype = "F1",linewidth = .75)+
   scale_x_reverse() +
+  scale_fill_manual(values = spp_clrs)
   geom_vline(data = ef[sharpe == max(sharpe),], aes(xintercept = frontier_sd,colour = "MaxSharpe"), 
              linetype = "twodash", size = .75) +
   geom_vline(xintercept = ret90, linetype = "twodash", size = .75) +
