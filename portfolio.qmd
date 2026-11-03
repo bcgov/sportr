@@ -154,7 +154,6 @@ SI.climate <- rbind(clim_hist, clim_fut) %>% select(GCM, PERIOD, DD5, CMD.total)
 
 ```
 
-
 ```{r probability distibutions of mortality events}
 datag1 <- qgamma(.5, shape=1, rate=3)
 datag2 <- qgamma(.5, shape=2, rate=2)
@@ -340,7 +339,6 @@ plot(xx17)
 plot(xx18)
 ```
 
-
 ```{r run portfolios}
 port1.ratios <- port_ratios(portfolio = portfolio1$Portfolio, run_list = portfolio1$run_list, current_unit = current_unit, returnValue = 0.9) %>% adorn_totals()
 
@@ -391,7 +389,6 @@ ggplot(clim_plot, aes(x = PERIOD, y = CMD.total)) +
   geom_line() +
   geom_text(aes(label = BGC), size = 4)
 ```
-
 
 ```{r sibec_by_year}
 

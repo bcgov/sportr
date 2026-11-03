@@ -105,14 +105,14 @@ NumericVector SimGrowth_Regular(DataFrame DF){
 }
 
 // [[Rcpp::export]]
-NumericVector simGrowthCpp(DataFrame DF){
-  int nTrees = 100;
+List simGrowthCpp(DataFrame DF, int estab, int chance_ruin){
+  int nTrees = estab;
   NumericVector Growth = DF["SI"]; //convert to vectors
   NumericVector ProbEvent  = DF["ProbEvent"];
 // NumericVector ProbLoss = DF["ProbLoss"];
   NumericVector gamma_shp = DF["gamma_shp"];
   NumericVector gamma_rate = DF["gamma_rate"];
-  NumericVector Ruin = DF["FeasDiff"];//think about this one
+  //NumericVector Ruin = DF["FeasDiff"];//think about this one
   
   int numYears = Growth.length();
   NumericVector Returns(numYears);
@@ -130,14 +130,20 @@ NumericVector simGrowthCpp(DataFrame DF){
       numDead = (percentDead/100)*prevTrees;
       nTrees = prevTrees - numDead;
     }
-    // if(Ruin[i] >= 3){
-    //   prevTrees = nTrees;
-    //   percentDead = Rcpp::rgamma(1, 1.5, 25)[0];
-    //   numDead = (percentDead/100)*prevTrees;
-    //   nTrees = nTrees - numDead;
-    // }
+    if(R::runif(0,80) >= chance_ruin){
+      prevTrees = nTrees;
+      percentDead = R::rgamma(6, 8);
+      if(percentDead > 100) {
+        percentDead = 100;
+      }
+      numDead = (percentDead/100)*prevTrees;
+      nTrees = nTrees - numDead;
+    }
   }
- return(Returns);
+ return List::create(
+   _["returns"] = Returns,
+   _["nTrees"] = nTrees
+ );
 }
 
 // [[Rcpp::export]]
